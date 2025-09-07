@@ -1,15 +1,40 @@
 // copied fram tcl-remote (https://github.com/NickCis/node-tcl-remote/tree/master)
+// see also  https://github.com/popeen/WebRemote-TCL-S69/blob/master/index.php
 "use strict";
 
-const investigateLocation = (location, emitter) => {
-  // fetch location, check out xml
-  fetch(location)
-    .then((res) => res.text())
-    .then((xml) => {
-      console.log("location xml", xml);
-      // emitter ("found", location);
-    });
-};
+const xml2js = require("xml2js");
+
+const investigateLocation = (location, emitter) =>
+  new Promise((resolve) => {
+    // fetch location, check out xml
+    fetch(location)
+      .then((res) => res.text())
+      .then((xml) => {
+        // console.log("location xml", xml);
+
+        // Parse XML to extract manufacturer
+        xml2js.parseString(xml, (err, result) => {
+          if (err) {
+            console.log("XML parsing error:", err);
+            return;
+          }
+
+          try {
+            const manufacturer =
+              result?.root?.device?.[0]?.manufacturer?.[0] || null;
+            resolve({ manufacturer });
+            return;
+          } catch (parseError) {
+            console.log("Error extracting manufacturer:", parseError);
+            resolve({ manufacturer: null });
+            return;
+          }
+        });
+      })
+      .catch((error) => {
+        console.log("Error fetching location:", location, error);
+      });
+  });
 
 Object.defineProperty(exports, "__esModule", { value: true });
 
@@ -85,7 +110,7 @@ var Finder = /*#__PURE__*/ (function (_EventEmitter) {
             return _this.handleMessage(msg);
           });
           socket.bind(Ssdp.port, function () {
-            console.log("socket bound");
+            // console.log("socket bound");
             socket.addMembership(Ssdp.ip);
             socket.setMulticastTTL(4);
             rs(_this);
@@ -119,9 +144,20 @@ var Finder = /*#__PURE__*/ (function (_EventEmitter) {
           "ST: upnp:rootdevice",
           Ssdp.delimiter,
         ];
-        var message = Buffer.from(payload.join(Ssdp.delimiter), "ascii");
+        var message = Buffer.from(
+          [
+            "M-SEARCH * HTTP/1.1",
+            "HOST: " + Ssdp.ip + ":" + Ssdp.port,
+            'MAN: "ssdp:discover"',
+            "MX: 2",
+            "ST: upnp:rootdevice",
+            Ssdp.delimiter,
+          ].join(Ssdp.delimiter),
+          "ascii"
+        );
+        // var message = Buffer.from(payload.join(Ssdp.delimiter), "ascii");
 
-        console.log("send discovery message", payload);
+        // console.log("send discovery message", payload);
         _this3.socket.send(message, Ssdp.port, Ssdp.ip);
 
         return finder.promise;
@@ -178,8 +214,7 @@ var Finder = /*#__PURE__*/ (function (_EventEmitter) {
       var match = str.match(LocationRegexp);
       if (match) {
         // console.log("match", typeof match, match, "incomingMessage", text);
-
-        console.log("match[1]", match[1]);
+        // console.log("match[1]", match[1]);
         location = match[1];
         break;
       }
@@ -188,16 +223,18 @@ var Finder = /*#__PURE__*/ (function (_EventEmitter) {
     if (!location) {
       return;
     }
-    investigateLocation(location, this.emit);
+    investigateLocation(location).then(({ manufacturer }) => {
+      if (manufacturer === "TCL") {
+        var finder = this.getFinder();
+        const url = new URL(location);
+        const ip = url.hostname;
+        this.emit("found", location);
+        finder.resolve(ip);
+      } else {
+        console.log(`Found something made by ${manufacturer}`);
+      }
+    });
 
-    // fetch location and see if there's something interesting here
-    if (location.endsWith("/tvrenderdesc.xml")) {
-      console.log("FOUND tvrenderdesc.xml", location);
-      var finder = this.getFinder();
-      this.emit("found", location);
-      finder.resolve(location);
-      return;
-    }
     if (!location.endsWith("/mstar")) {
       // console.log("no mstar", location);
       return;

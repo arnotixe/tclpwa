@@ -278,12 +278,17 @@ async function main() {
   if (!tv) {
     // Create a Finder object
     finder = new Finder();
-    console.log("finder", finder);
+    // console.log("finder", finder);
 
     // Find the first possible location of a TCL tv
     tv = await finder.find();
     console.log("found TV at", tv);
   }
+  if (finder) {
+    await finder.close();
+  }
+
+  console.log("Enter commands +-m s g x q to control TV, Ctrl-C to exit", tv);
 
   const remote = new Remote(tv);
   // await remote.init();
@@ -345,9 +350,6 @@ async function main() {
     }
   }
 
-  if (finder) {
-    await finder.close();
-  }
   process.exit(0);
 }
 
