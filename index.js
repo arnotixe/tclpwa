@@ -272,7 +272,8 @@ const getKey = () => {
 
 async function main() {
   // let tv = "http://192.168.100.55:49152/tvrenderdesc.xml";
-  let tv = "192.168.100.55";
+  let tv = "";
+  // let tv = "192.168.100.55";
   let finder = null;
   if (!tv) {
     // Create a Finder object

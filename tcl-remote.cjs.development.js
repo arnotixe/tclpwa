@@ -1,6 +1,16 @@
 // copied fram tcl-remote (https://github.com/NickCis/node-tcl-remote/tree/master)
 "use strict";
 
+const investigateLocation = (location, emitter) => {
+  // fetch location, check out xml
+  fetch(location)
+    .then((res) => res.text())
+    .then((xml) => {
+      console.log("location xml", xml);
+      // emitter ("found", location);
+    });
+};
+
 Object.defineProperty(exports, "__esModule", { value: true });
 
 function _interopDefault(ex) {
@@ -136,9 +146,9 @@ var Finder = /*#__PURE__*/ (function (_EventEmitter) {
     });
   };
 
+  // handle SSDP discovery messages
   _proto.handleMessage = function handleMessage(msg) {
     var text = msg.toString();
-    // console.log("incomingMessage", text);
 
     var _text$split = text.split(Ssdp.delimiter),
       rest = _text$split.slice(1);
@@ -178,6 +188,9 @@ var Finder = /*#__PURE__*/ (function (_EventEmitter) {
     if (!location) {
       return;
     }
+    investigateLocation(location, this.emit);
+
+    // fetch location and see if there's something interesting here
     if (location.endsWith("/tvrenderdesc.xml")) {
       console.log("FOUND tvrenderdesc.xml", location);
       var finder = this.getFinder();

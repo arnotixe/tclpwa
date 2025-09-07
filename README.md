@@ -13,6 +13,8 @@ x power
 
 ## investigation
 
+grabbed keys from the app called magiconnect (ad app with remote control functionality)
+
 copied out fork of https://github.com/NickCis/node-tcl-remote/tree/master and ran sniffer
 
 saw result
