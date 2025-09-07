@@ -1,6 +1,7 @@
-const { Finder, Remote, Keys } = require("./tcl-remote.cjs.development");
+const { Finder, Remote } = require("./tcl-remote.cjs.development");
 
-const kedefs = [
+// wonder where these came from
+const keydefs = [
   "TR_KEY_RED",
   "TR_KEY_GREEN",
   "TR_KEY_YELLOW",
