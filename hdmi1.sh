@@ -1,3 +1,4 @@
+# my tv seems to not have an input button :/
 delay="1"
 ./send.sh TR_KEY_SMARTTV; sleep $delay;
 ./send.sh TR_KEY_BACK; sleep $delay;

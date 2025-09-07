@@ -5,5 +5,6 @@ HOST=${2:-"192.168.100.55"}
 PORT=${3:-"4123"}
 XML_PAYLOAD='<?xml version="1.0" encoding="utf-8"?><root><action name="setKey" eventAction="TR_DOWN" keyCode="'$CMD'" /></root>'
 echo "Sending $CMD key to $HOST:$PORT"
-echo "$XML_PAYLOAD" | nc "$HOST" "$PORT" -q 0
-echo "ok"
+# strip null byte
+res=`echo "$XML_PAYLOAD" | nc "$HOST" "$PORT" -q 0 |tr -d '\0'`
+echo "$res"
