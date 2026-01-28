@@ -199,6 +199,12 @@ const getKey = () => {
         case "o": {
           // resolve("TR_KEY_OPTION"); // both same
           // resolve("TR_KEY_MAINMENU"); // config menu really
+          resolve("TR_KEY_POWER");
+          break;
+        }
+        case "p": {
+          // resolve("TR_KEY_OPTION"); // both same
+          // resolve("TR_KEY_MAINMENU"); // config menu really
           break;
         }
         case "return": {
@@ -277,7 +283,7 @@ async function main() {
   let finder = null;
   if (!tv) {
     // Create a Finder object
-    finder = new Finder();
+    finder = new Finder("192.168.100.55");
     // console.log("finder", finder);
 
     // Find the first possible location of a TCL tv

@@ -224,14 +224,14 @@ var Finder = /*#__PURE__*/ (function (_EventEmitter) {
       return;
     }
     investigateLocation(location).then(({ manufacturer }) => {
+      const url = new URL(location);
+      const ip = url.hostname;
       if (manufacturer === "TCL") {
         var finder = this.getFinder();
-        const url = new URL(location);
-        const ip = url.hostname;
         this.emit("found", location);
         finder.resolve(ip);
       } else {
-        console.log(`Found something made by ${manufacturer}`);
+        console.log(`Found something made by ${manufacturer} at ${ip}`);
       }
     });
 
