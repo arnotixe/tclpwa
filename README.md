@@ -115,3 +115,36 @@ docker stop tvctl
 "volume_mute": {"description": "Mute a media player's volume.", "fields": {"entity_id": {"description": "Name(s) of entities to mute.", "example": "media_player.living_room_sonos"}, "is_volume_muted": {"description": "True/false for mute/unmute.", "example": true}}},
 "volume_set": {"description": "Set a media player's volume level.", "fields": {"entity_id": {"description": "Name(s) of entities to set volume level on.", "example": "media_player.living_room_sonos"}, "volume_level": {"description": "Volume level to set as float.", "example": 0.6}}},
 "volume_up": {"description": "Turn a media player volume up.", "fields": {"entity_id": {"description": "Name(s) of entities to turn volume up on.", "example": "media_player.living_room_sonos"}}}}},
+
+### google cast SDK supportedMediaCommands
+
+In the context of the Google Cast SDK, supported media commands are typically represented by a bitwise integer. The value 4303 represents a specific, commonly used combination of supported actions, often referred to as ALL_BASIC_MEDIA plus additional functionality, typically encompassing the following:
+1 (PAUSE): Pause the media playback.
+2 (SEEK): Seek to a specific time position.
+4 (STREAM_VOLUME): Change the stream volume.
+8 (STREAM_MUTE): Mute the stream.
+64 (QUEUE_NEXT): Skip to the next item in the queue.
+128 (QUEUE_PREV): Skip to the previous item in the queue.
+512 (SKIP_AD): Skip ads.
+4096 (EDIT_TRACKS): Edit media tracks (subtitles, etc.).
+These combined values enable a rich set of transport controls on the sender app (iOS/Android) and the receiver.
+Overview of Media Command Codes
+The Chromecast uses bitwise flags to determine which UI controls (play, pause, seek, etc.) to enable on the controller app.
+1 - Pause
+2 - Seek
+4 - Stream Volume
+8 - Stream Mute
+16 - Skip Forward
+32 - Skip Backward
+64 - Queue Next
+128 - Queue Prev
+256 - Queue Shuffle
+512 - Skip Ad
+1024 - Queue Repeat All
+2048 - Queue Repeat One
+4096 - Edit Tracks
+8192 - Playback Rate
+16384 - Like
+32768 - Dislike
+65536 - Follow
+131072 - Unfollow

@@ -263,6 +263,65 @@ function chromecastControl(ip, action) {
   });
 }
 
+function chromecastEditTracks(ip, activeTrackIds) {
+  return new Promise((resolve, reject) => {
+    const client = new Client();
+    const timeout = setTimeout(() => {
+      client.close();
+      reject(new Error("Chromecast connection timed out"));
+    }, 5000);
+
+    client.on("error", (err) => {
+      clearTimeout(timeout);
+      client.close();
+      reject(err);
+    });
+
+    client.connect(ip, () => {
+      client.getStatus((err, status) => {
+        if (err) {
+          clearTimeout(timeout);
+          client.close();
+          return reject(err);
+        }
+
+        const session = status.applications && status.applications[0];
+        if (!session) {
+          clearTimeout(timeout);
+          client.close();
+          return resolve({ ok: false, reason: "no_active_app" });
+        }
+
+        client.join(session, DefaultMediaReceiver, (err, player) => {
+          if (err) {
+            clearTimeout(timeout);
+            client.close();
+            return reject(err);
+          }
+
+          player.getStatus((err) => {
+            if (err || !player.media.currentSession) {
+              clearTimeout(timeout);
+              client.close();
+              return resolve({ ok: false, reason: "no_media_session" });
+            }
+
+            player.media.sessionRequest(
+              { type: "EDIT_TRACKS_INFO", activeTrackIds },
+              (err, response) => {
+                clearTimeout(timeout);
+                client.close();
+                if (err) reject(err);
+                else resolve({ ok: true, response });
+              }
+            );
+          });
+        });
+      });
+    });
+  });
+}
+
 function chromecastStatus(ip) {
   return new Promise((resolve, reject) => {
     const client = new Client();
@@ -409,6 +468,25 @@ const server = http.createServer(async (req, res) => {
       const status = await chromecastStatus(ip);
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(status));
+    } catch (err) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/api/chromecast/tracks") {
+    const body = JSON.parse(await readBody(req));
+    const { ip, activeTrackIds } = body;
+    if (!ip || !Array.isArray(activeTrackIds)) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "ip and activeTrackIds are required" }));
+      return;
+    }
+    try {
+      const result = await chromecastEditTracks(ip, activeTrackIds);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(result));
     } catch (err) {
       res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: err.message }));

@@ -299,6 +299,8 @@ let ccIconUrl = null;
 let ccProgress = 0;
 let ccTitle = null;
 let ccApp = null;
+let ccTracks = [];
+let ccActiveTrackIds = [];
 
 const mediaToggle = document.getElementById("media-toggle");
 const mediaRew = document.getElementById("media-rew");
@@ -306,6 +308,9 @@ const mediaPlayPause = document.getElementById("media-playpause");
 const mediaFF = document.getElementById("media-ff");
 const mediaProgressBar = document.getElementById("media-progress-bar");
 const mediaTitleEl = document.getElementById("media-title");
+const mediaTracksBtn = document.getElementById("media-tracks-btn");
+const tracksDropdown = document.getElementById("tracks-dropdown");
+const tracksBackdrop = document.getElementById("tracks-backdrop");
 
 function updateCCState(data) {
   const ms = data && data.mediaStatus;
@@ -318,6 +323,9 @@ function updateCCState(data) {
   // Extract title
   const title = ms && ms.media && ms.media.metadata && ms.media.metadata.title;
   ccTitle = title && title !== ccApp ? title : null;
+  // Extract tracks
+  ccTracks = ms && ms.media && ms.media.tracks ? ms.media.tracks : [];
+  ccActiveTrackIds = ms && ms.activeTrackIds ? ms.activeTrackIds : [];
   // Extract progress
   if (ms && ms.currentTime > 0 && ms.media && ms.media.duration > 0) {
     ccProgress = ms.currentTime / ms.media.duration;
@@ -365,6 +373,7 @@ function updateMediaButtons() {
   mediaRew.disabled = ccDisabled;
   mediaPlayPause.disabled = ccDisabled;
   mediaFF.disabled = ccDisabled;
+  mediaTracksBtn.disabled = mediaMode !== "cc" || ccTracks.length === 0;
   // Media title
   mediaTitleEl.textContent = mediaMode === "cc" && ccTitle ? ccTitle : "";
   // Progress bar
@@ -379,6 +388,104 @@ mediaToggle.addEventListener("click", () => {
   mediaMode = mediaMode === "cc" ? "tv" : "cc";
   updateMediaButtons();
 });
+
+// -- Tracks dropdown --
+function closeTracksDropdown() {
+  tracksDropdown.classList.remove("open");
+  tracksBackdrop.classList.remove("open");
+}
+
+function openTracksDropdown() {
+  tracksDropdown.innerHTML = "";
+
+  const audioTracks = ccTracks.filter((t) => t.type === "AUDIO");
+  const textTracks = ccTracks.filter((t) => t.type === "TEXT");
+
+  if (audioTracks.length > 0) {
+    const label = document.createElement("div");
+    label.className = "tracks-group-label";
+    label.textContent = "Audio";
+    tracksDropdown.appendChild(label);
+
+    const seg = document.createElement("div");
+    seg.className = "tracks-segments";
+    audioTracks.forEach((t) => {
+      const btn = document.createElement("button");
+      btn.textContent = (t.language || "?").toUpperCase();
+      if (ccActiveTrackIds.includes(t.trackId) || audioTracks.length === 1) btn.classList.add("active");
+      btn.addEventListener("click", () => selectTrack("AUDIO", t.trackId));
+      seg.appendChild(btn);
+    });
+    tracksDropdown.appendChild(seg);
+  }
+
+  if (textTracks.length > 0) {
+    const label = document.createElement("div");
+    label.className = "tracks-group-label";
+    label.textContent = "Subtitles";
+    tracksDropdown.appendChild(label);
+
+    const seg = document.createElement("div");
+    seg.className = "tracks-segments";
+
+    // "Off" button for subtitles
+    const offBtn = document.createElement("button");
+    offBtn.textContent = "OFF";
+    const anyTextActive = textTracks.some((t) => ccActiveTrackIds.includes(t.trackId));
+    if (!anyTextActive) offBtn.classList.add("active");
+    offBtn.addEventListener("click", () => selectTrack("TEXT", null));
+    seg.appendChild(offBtn);
+
+    textTracks.forEach((t) => {
+      const btn = document.createElement("button");
+      btn.textContent = (t.language || "?").toUpperCase();
+      if (ccActiveTrackIds.includes(t.trackId)) btn.classList.add("active");
+      btn.addEventListener("click", () => selectTrack("TEXT", t.trackId));
+      seg.appendChild(btn);
+    });
+    tracksDropdown.appendChild(seg);
+  }
+
+  tracksDropdown.classList.add("open");
+  tracksBackdrop.classList.add("open");
+}
+
+async function selectTrack(type, trackId) {
+  // Build new activeTrackIds: keep tracks of other types, set this type
+  const otherIds = ccActiveTrackIds.filter((id) => {
+    const track = ccTracks.find((t) => t.trackId === id);
+    return track && track.type !== type;
+  });
+  const newIds = trackId !== null ? [...otherIds, trackId] : otherIds;
+
+  const ip = getActiveChromecastIP();
+  if (!ip) return;
+  try {
+    const res = await fetch("/api/chromecast/tracks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ip, activeTrackIds: newIds }),
+    });
+    const data = await res.json();
+    console.log("CC tracks:", data);
+    if (res.ok && data.ok) {
+      ccActiveTrackIds = newIds;
+      openTracksDropdown(); // re-render with new state
+    }
+  } catch (err) {
+    console.error("Track selection error:", err);
+  }
+}
+
+mediaTracksBtn.addEventListener("click", () => {
+  if (tracksDropdown.classList.contains("open")) {
+    closeTracksDropdown();
+  } else {
+    openTracksDropdown();
+  }
+});
+
+tracksBackdrop.addEventListener("click", closeTracksDropdown);
 
 async function sendChromecastCommand(action) {
   const ip = getActiveChromecastIP();
