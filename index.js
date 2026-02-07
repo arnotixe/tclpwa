@@ -278,12 +278,12 @@ const getKey = () => {
 
 async function main() {
   // let tv = "http://192.168.100.55:49152/tvrenderdesc.xml";
-  let tv = "";
-  // let tv = "192.168.100.55";
+  //let tv = "";
+  let tv = "192.168.1.61";
   let finder = null;
   if (!tv) {
     // Create a Finder object
-    finder = new Finder("192.168.100.55");
+    finder = new Finder(); // "192.168.100.55"
     // console.log("finder", finder);
 
     // Find the first possible location of a TCL tv
@@ -302,6 +302,7 @@ async function main() {
 
   while (true) {
     const key = await getKey();
+    // could have a key to "re-search TV"
     if (key === "q") {
       break;
     }
