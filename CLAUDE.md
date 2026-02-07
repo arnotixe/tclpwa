@@ -4,92 +4,74 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Node.js-based TCL TV remote control application that communicates with TCL smart TVs over the local network. The project is based on a fork of [node-tcl-remote](https://github.com/NickCis/node-tcl-remote/tree/master) and implements a keyboard-to-remote-control interface.
+Node.js-based TCL TV remote control. Communicates with TCL smart TVs over the local network via raw TCP and UPnP/SSDP discovery. Based on a fork of [node-tcl-remote](https://github.com/NickCis/node-tcl-remote/tree/master).
+
+## Running
+
+### CLI (interactive keyboard remote)
+```bash
+node cli.js
+```
+Keyboard mappings: `+/-` volume, arrows/enter/esc navigation, `s` Smart TV menu, `m` mute, `o` power, `n` play/pause, `g` guide, `x` test key cycle.
+
+### Web app (browser-based remote)
+```bash
+node server.js              # Runs on port 8765 (override with PORT env var)
+```
+
+### Docker (requires --net=host for SSDP multicast and raw TCP to TV)
+```bash
+docker build -t tvctl .
+docker run --net=host tvctl
+```
+
+### Shell scripts
+```bash
+./send.sh TR_KEY_POWER                    # Send single command (default host 192.168.100.55)
+./send.sh TR_KEY_VOL_UP 192.168.1.100     # Send to specific IP
+./hdmi2.sh                                # Navigate to HDMI2 via Smart TV menu sequence
+./hdmi3.sh                                # Navigate to HDMI3
+./off.sh                                  # Power off
+```
 
 ## Architecture
 
-### Core Components
-
-- **index.js**: Main application entry point containing the interactive keyboard interface and TCL TV remote control logic
-- **tcl-remote.cjs.development.js**: Core TCL remote control library (copied from node-tcl-remote) containing `Finder` and `Remote` classes
-- **keylist_from_extracting_magiconnect.txt**: Reference list of available TCL remote keys extracted from the MagiConnect app
+There are two interfaces to the same TV protocol: a CLI (`cli.js`) and a web app (`server.js` + `web/`).
 
 ### Communication Protocol
 
-The application uses two communication methods:
-1. **UPnP Discovery**: TV discovery via UPnP/SSDP on port 1900 using XML descriptor at `http://TV_IP:49152/tvrenderdesc.xml`
-2. **Direct TCP Communication**: Key commands sent as XML payloads to TV on port 4123
+1. **TV Discovery**: SSDP M-SEARCH multicast on `239.255.255.250:1900`. Responses contain a `Location` header pointing to a UPnP XML descriptor (e.g. `http://TV_IP:49152/tvrenderdesc.xml`). The descriptor's `<manufacturer>` field is checked for "TCL".
 
-Key command format:
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<root>
-  <action name="setKey" eventAction="TR_DOWN" keyCode="TR_KEY_POWER" />
-</root>
-```
+2. **Key Commands**: XML payloads sent over raw TCP to TV port **4123**:
+   ```xml
+   <?xml version="1.0" encoding="utf-8"?><root><action name="setKey" eventAction="TR_DOWN" keyCode="TR_KEY_POWER" /></root>
+   ```
+   All key codes follow the `TR_KEY_*` convention. Full list in `cli.js:keydefs` array and `keylist_from_extracting_magiconnect.txt`.
 
-### Key Mapping System
+### Core Files
 
-The application maps keyboard inputs to TCL remote keys:
-- Number keys (0-9) → `TR_KEY_0` to `TR_KEY_9`
-- Arrow keys → `TR_KEY_UP`, `TR_KEY_DOWN`, `TR_KEY_LEFT`, `TR_KEY_RIGHT` 
-- Enter → `TR_KEY_OK`
-- +/- → Volume up/down
-- m → Mute
-- s → Smart TV menu
-- x → Power (and debug key testing)
+- **`tcl-remote.cjs.development.js`**: Library copied from node-tcl-remote. Exports `Finder` (SSDP discovery via dgram/UDP), `Remote` (TCP socket to port 4123, `press(keyCode)` method), and `Device` (fetches UPnP descriptor). Uses Node `net`, `dgram`, `http`, `xml2js`.
 
-## Running the Application
+- **`cli.js`**: Terminal-based remote. Uses `Finder`/`Remote` from the library. Reads raw stdin keypresses and maps them to `TR_KEY_*` codes. TV IP can be hardcoded in `main()` or auto-discovered.
 
-### Main Application
-```bash
-node index.js
-```
+- **`server.js`**: HTTP server (no framework, Node built-in `http`). Serves static files from `web/` and provides two API endpoints:
+  - `POST /api/send` `{ip, key}` → opens TCP connection to TV, sends XML command
+  - `POST /api/discover` → runs SSDP discovery, returns array of `{ip, manufacturer, friendlyName}`
 
-This starts an interactive keyboard interface for controlling the TV. The application will:
-1. Auto-discover TCL TVs on the network using UPnP
-2. Accept keyboard input and translate to remote commands
-3. Send commands directly to the TV via TCP
+- **`web/index.html`**: Single-page app with two views (control page and settings page), styled as a dark mobile remote control.
 
-### Utility Scripts
+- **`web/tvcontrol.js`**: Browser-side logic. Stores TV IP in `localStorage`, sends keys via `fetch('/api/send')`, handles discovery via `fetch('/api/discover')`.
 
-**Send individual commands:**
-```bash
-./send.sh TR_KEY_POWER                    # Send power key
-./send.sh TR_KEY_VOL_UP 192.168.1.100     # Send to specific IP
-```
+### Why the server proxy exists
 
-**Automated HDMI switching:**
-```bash
-./hdmi1.sh  # Navigate to HDMI input via Smart TV menu
-```
+Browsers cannot open raw TCP sockets or UDP multicast. The Node server acts as a thin proxy between the browser's HTTP requests and the TV's TCP/UDP protocols. `--net=host` is required in Docker so the container has direct access to the LAN for both SSDP multicast and TCP connections to the TV.
 
-## Development Notes
+## Dependencies
 
-### TV Discovery Process
+Single runtime dependency: `xml2js` (for parsing UPnP XML descriptors). No build step, no transpilation, no test framework.
 
-The `Finder` class handles UPnP/SSDP discovery:
-1. Broadcasts SSDP M-SEARCH on multicast 239.255.255.250:1900
-2. Parses UPnP responses for TCL device descriptors
-3. Returns TV URL for `Remote` class initialization
+## Key Behavior Notes
 
-### Key Command Protocol
-
-All remote commands follow the TR_KEY_* naming convention. Commands are sent as XML over raw TCP socket to port 4123. The TV responds with XML confirmation or error messages.
-
-### Hardware Specs
-
-The `specs/` directory contains UPnP service descriptors for specific TV models:
-- **M6586_LA/**: Contains XML specs for TV model M6586_LA
-  - `avt.xml`: AV Transport service
-  - `cmr.xml`: Connection Manager service  
-  - `rcr.xml`: Rendering Control service
-  - `tcltv-announced.xml`: Device announcement descriptor
-
-### Key Testing and Discovery
-
-The 'x' key in the main application triggers a test mode that cycles through various TR_KEY_* commands to test TV responsiveness. Many keys are context-dependent (only work in specific TV modes/apps).
-
-## Network Configuration
-
-Default TV discovery assumes local network 192.168.100.x. The application auto-discovers but can be hardcoded by setting the `tv` variable in `main()` function of index.js.
+- Many `TR_KEY_*` codes are context-dependent and only work in specific TV states (e.g. `TR_KEY_LIST` only works in TV/antenna mode). The commented-out test results in `cli.js` document which keys were tested and their behavior.
+- The `Remote` class maintains a persistent TCP socket with a 30-second ping interval. The web server creates a fresh TCP connection per request instead.
+- HDMI switching scripts (`hdmi2.sh`, `hdmi3.sh`) work by navigating the Smart TV menu with timed key sequences since there's no direct HDMI input key.

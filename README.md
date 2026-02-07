@@ -49,6 +49,7 @@ get the SCPDURL (see cmr.xml) for device info. All of the methods that can be in
 
 from google search
 
+```
 POST /upnp/control/AVTransport HTTP/1.1
 Host: 192.168.0.10:52323
 Connection: keep-alive
@@ -64,7 +65,6 @@ Accept-Encoding: gzip, deflate
 Accept-Language: de-DE,de;q=0.8,en-US;q=0.6,en;q=0.4
 
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
-
 <s:Envelope s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/" xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
 <s:Body>
 <u:SetAVTransportURI xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
@@ -74,3 +74,19 @@ Accept-Language: de-DE,de;q=0.8,en-US;q=0.6,en;q=0.4
 </u:SetAVTransportURI>
 </s:Body>
 </s:Envelope>
+```
+
+# Webapp
+
+Claude was kind enough to build a version for us.
+
+## Docker
+
+docker build -t tvctl .
+docker run -d --net=host --restart unless-stopped --name tvctl tvctl
+visit http://192.168.1.130:8765/ to "install" it
+
+### can after that start/stop with
+
+docker start tvctl
+docker stop tvctl
