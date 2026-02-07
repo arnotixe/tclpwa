@@ -8,6 +8,6 @@ RUN npm ci --production
 COPY server.js ./
 COPY web/ ./web/
 
-EXPOSE 8765
+EXPOSE 8765 8766
 
 CMD ["node", "server.js"]

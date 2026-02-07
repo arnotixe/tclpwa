@@ -1,4 +1,5 @@
 const http = require("http");
+const https = require("https");
 const fs = require("fs");
 const path = require("path");
 const net = require("net");
@@ -7,6 +8,7 @@ const xml2js = require("xml2js");
 const { Client, DefaultMediaReceiver } = require("castv2-client");
 
 const PORT = process.env.PORT || 8765;
+const HTTPS_PORT = process.env.HTTPS_PORT || 8766;
 
 const MIME_TYPES = {
   ".html": "text/html",
@@ -494,6 +496,26 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Serve mkcert root CA for phone installation
+  if (req.method === "GET" && req.url === "/rootCA.pem") {
+    const caPath = path.join(
+      process.env.HOME || process.env.USERPROFILE || "",
+      ".local/share/mkcert/rootCA.pem"
+    );
+    try {
+      const content = fs.readFileSync(caPath);
+      res.writeHead(200, {
+        "Content-Type": "application/x-pem-file",
+        "Content-Disposition": "attachment; filename=rootCA.pem",
+      });
+      res.end(content);
+    } catch {
+      res.writeHead(404);
+      res.end("rootCA.pem not found. Run: mkcert -install");
+    }
+    return;
+  }
+
   // Static file serving from web/
   let filePath = req.url === "/" ? "/index.html" : req.url;
   filePath = path.join(__dirname, "web", filePath);
@@ -514,3 +536,16 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`TV remote webapp running at http://localhost:${PORT}`);
 });
+
+// HTTPS server for PWA support
+const certPath = path.join(__dirname, "cert.pem");
+const keyPath = path.join(__dirname, "key.pem");
+if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
+  const httpsServer = https.createServer(
+    { cert: fs.readFileSync(certPath), key: fs.readFileSync(keyPath) },
+    server.listeners("request")[0]
+  );
+  httpsServer.listen(HTTPS_PORT, () => {
+    console.log(`TV remote webapp (HTTPS) running at https://localhost:${HTTPS_PORT}`);
+  });
+}

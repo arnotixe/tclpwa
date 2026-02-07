@@ -7,7 +7,12 @@
       content="width=device-width, initial-scale=1.0, user-scalable=no"
     />
     <title>TV Remote</title>
+    <meta name="theme-color" content="#16162a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="manifest" href="/manifest.json" />
     <style>
       * {
         box-sizing: border-box;
@@ -478,6 +483,53 @@
         color: #888;
         min-height: 1.4em;
       }
+
+      /* PWA update dialog */
+      .update-banner {
+        display: none;
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #1a1a2e;
+        border: 1px solid #333;
+        border-radius: 10px;
+        padding: 14px 20px;
+        z-index: 200;
+        text-align: center;
+        max-width: 300px;
+        width: 90%;
+      }
+      .update-banner.show {
+        display: block;
+      }
+      .update-banner p {
+        color: #ccc;
+        font-size: 0.85rem;
+        margin-bottom: 12px;
+      }
+      .update-banner-buttons {
+        display: flex;
+        gap: 8px;
+        justify-content: center;
+      }
+      .update-banner-buttons button {
+        padding: 8px 20px;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .update-btn-ok {
+        background: #2d2d6a;
+        color: #ccc;
+        border: none;
+      }
+      .update-btn-later {
+        background: transparent;
+        color: #888;
+        border: 1px solid #333;
+      }
     </style>
   </head>
   <body>
@@ -688,6 +740,23 @@
             <div id="discover-cc-results"></div>
           </div>
         </div>
+        <div class="settings-section" style="border: none; margin-top: 8px; padding-top: 0">
+          <div style="font-size: 0.7rem; color: #aaa; line-height: 1.5">
+            To install as an app: download
+            <a id="pwa-ca-link" href="/rootCA.pem" style="color: #ccc">rootCA.pem</a>,
+            go to Settings &gt; Security &gt; Install CA certificate,
+            then open <code id="pwa-origin" style="color: #ccc"></code>
+            and add to home screen.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="update-banner" class="update-banner">
+      <p>A new version of TVCTL is available.</p>
+      <div class="update-banner-buttons">
+        <button class="update-btn-ok" id="update-btn-ok">Update</button>
+        <button class="update-btn-later" id="update-btn-later">Later</button>
       </div>
     </div>
 

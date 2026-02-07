@@ -503,8 +503,10 @@ async function sendChromecastCommand(action) {
     } else if (data.reason) {
       await fetchChromecastStatus();
     } else {
-      updateCCState(data);
+      // Toggle playing state immediately, then refresh full status
+      ccPlaying = !ccPlaying;
       updateMediaButtons();
+      setTimeout(fetchChromecastStatus, 1000);
     }
   } catch (err) {
     console.error("Chromecast error:", err);
@@ -643,6 +645,9 @@ if (oldIP && getTVs().length === 0) {
 // -- Init --
 updateStatus();
 fetchChromecastStatus();
+// Show HTTPS origin for PWA install instructions
+const httpsOrigin = "https://" + location.hostname + ":8766";
+document.getElementById("pwa-origin").textContent = httpsOrigin;
 
 // -- Periodic Chromecast status polling --
 let ccPollTimer = null;
@@ -671,3 +676,42 @@ document.addEventListener("visibilitychange", () => {
 });
 
 startCCPoll();
+
+// -- PWA Service Worker --
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js").then((reg) => {
+    // Check for updates on load
+    reg.update();
+
+    let newWorker;
+
+    reg.addEventListener("updatefound", () => {
+      newWorker = reg.installing;
+      newWorker.addEventListener("statechange", () => {
+        if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
+          // New version available — show update banner
+          const banner = document.getElementById("update-banner");
+          banner.classList.add("show");
+
+          document.getElementById("update-btn-ok").addEventListener("click", () => {
+            newWorker.postMessage({ type: "SKIP_WAITING" });
+            banner.classList.remove("show");
+          });
+
+          document.getElementById("update-btn-later").addEventListener("click", () => {
+            banner.classList.remove("show");
+          });
+        }
+      });
+    });
+
+    // Reload when new SW takes over
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (!refreshing) {
+        refreshing = true;
+        location.reload();
+      }
+    });
+  });
+}

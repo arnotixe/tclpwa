@@ -148,3 +148,18 @@ The Chromecast uses bitwise flags to determine which UI controls (play, pause, s
 32768 - Dislike
 65536 - Follow
 131072 - Unfollow
+
+### cert
+
+sudo apt install -y mkcert  
+ mkcert -install  
+ cd ~/tvctl  
+ mkcert -cert-file cert.pem -key-file key.pem 192.168.1.130 localhost
+
+Then restart npm run dev and open https://192.168.1.130:8766 — it should show a green  
+ lock and offer PWA install.
+
+For your phone, copy the root CA to it:
+ls ~/.local/share/mkcert/rootCA.pem
+Transfer that file to your phone and install it under Settings > Security > Encryption
+& credentials > Install a certificate > CA certificate.
