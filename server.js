@@ -108,6 +108,76 @@ function discoverTV() {
   });
 }
 
+function discoverChromecasts() {
+  return new Promise((resolve) => {
+    const found = [];
+    const pending = [];
+    const seen = new Set();
+    const socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
+
+    const message = Buffer.from(
+      [
+        "M-SEARCH * HTTP/1.1",
+        "HOST: 239.255.255.250:1900",
+        'MAN: "ssdp:discover"',
+        "MX: 2",
+        "ST: urn:dial-multiscreen-org:service:dial:1",
+        "\r\n",
+      ].join("\r\n"),
+      "ascii"
+    );
+
+    const locationRegexp = /^Location: ?(.*)$/im;
+
+    socket.on("message", (msg) => {
+      const text = msg.toString();
+      const match = text.match(locationRegexp);
+      if (!match) return;
+
+      const location = match[1].trim();
+      let ip;
+      try {
+        ip = new URL(location).hostname;
+      } catch {
+        return;
+      }
+      if (seen.has(ip)) return;
+      seen.add(ip);
+
+      // Try to get Chromecast info from its local API
+      const p = fetch(
+        `http://${ip}:8008/setup/eureka_info?params=name,model_name`,
+        { signal: AbortSignal.timeout(2500) }
+      )
+        .then((res) => res.json())
+        .then((info) => {
+          found.push({
+            ip,
+            name: info.name || "Chromecast",
+            model: info.model_name || "",
+          });
+        })
+        .catch(() => {
+          // DIAL device but not a Chromecast (no eureka_info)
+        });
+      pending.push(p);
+    });
+
+    socket.bind(() => {
+      socket.addMembership("239.255.255.250");
+      socket.setMulticastTTL(4);
+      socket.send(message, 1900, "239.255.255.250");
+    });
+
+    // Wait for SSDP responses, then wait for all eureka_info fetches to settle
+    setTimeout(async () => {
+      socket.close();
+      await Promise.allSettled(pending);
+      resolve(found);
+    }, 3000);
+  });
+}
+
 function readBody(req) {
   return new Promise((resolve) => {
     let body = "";
@@ -142,6 +212,18 @@ const server = http.createServer(async (req, res) => {
       const tvs = await discoverTV();
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(tvs));
+    } catch (err) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/api/discover-chromecast") {
+    try {
+      const ccs = await discoverChromecasts();
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(ccs));
     } catch (err) {
       res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: err.message }));

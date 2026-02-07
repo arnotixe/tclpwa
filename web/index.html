@@ -7,6 +7,7 @@
       content="width=device-width, initial-scale=1.0, user-scalable=no"
     />
     <title>TV Remote</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <style>
       * {
         box-sizing: border-box;
@@ -37,18 +38,6 @@
       header h1 {
         font-size: 1.2rem;
         font-weight: 600;
-      }
-      #status-dot {
-        width: 10px;
-        height: 10px;
-        border-radius: 50%;
-        background: #666;
-        display: inline-block;
-        margin-left: 8px;
-        vertical-align: middle;
-      }
-      #status-dot.connected {
-        background: #4ade80;
       }
       #settings-link {
         color: #aaa;
@@ -251,20 +240,6 @@
         white-space: nowrap;
       }
 
-      #discover-btn {
-        background: #1e3a5f;
-        border-color: #2563eb;
-        padding: 12px;
-      }
-      #discover-btn:active {
-        background: #2563eb;
-      }
-
-      #discover-status {
-        font-size: 0.85rem;
-        color: #888;
-        min-height: 1.4em;
-      }
 
       .back-link {
         color: #aaa;
@@ -339,10 +314,42 @@
         width: 100%;
       }
 
-      #saved-tvs:empty::after {
-        content: "No TVs saved yet.";
+      .device-list:empty::after {
         color: #666;
         font-size: 0.85rem;
+      }
+      #saved-tvs:empty::after {
+        content: "No TVs saved yet.";
+      }
+      #saved-chromecasts:empty::after {
+        content: "No Chromecasts saved yet.";
+      }
+
+      .settings-section {
+        border: 1px solid #333;
+        border-radius: 10px;
+        padding: 12px;
+      }
+      .settings-section h2 {
+        font-size: 1rem;
+        font-weight: 600;
+        margin-bottom: 10px;
+        color: #ccc;
+      }
+
+      .discover-btn {
+        background: #1e3a5f;
+        border-color: #2563eb;
+        padding: 12px;
+      }
+      .discover-btn:active {
+        background: #2563eb;
+      }
+
+      .discover-status {
+        font-size: 0.85rem;
+        color: #888;
+        min-height: 1.4em;
       }
     </style>
   </head>
@@ -350,18 +357,12 @@
     <!-- CONTROL PAGE -->
     <div id="page-control" class="page active">
       <header>
-        <h1>TV Remote <span id="status-dot"></span></h1>
+        <button class="power" data-key="TR_KEY_POWER" style="padding:8px 10px"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M5.636 5.636a9 9 0 1 0 12.728 0M12 3v9"/></svg></button>
+        <h1 id="tv-ip-display"></h1>
         <a href="#" id="settings-link" title="Settings">&#9881;</a>
       </header>
-      <p id="tv-ip-display"></p>
 
       <div class="remote">
-        <!-- Power -->
-        <div class="btn-row">
-          <button class="power" data-key="TR_KEY_POWER">Power</button>
-        </div>
-
-        <div class="sep"></div>
 
         <!-- D-Pad -->
         <div class="dpad">
@@ -559,25 +560,50 @@
       </header>
 
       <div class="settings">
-        <div class="field">
-          <label>Saved TVs</label>
-          <div id="saved-tvs"></div>
-        </div>
-
-        <div class="field">
-          <label>Add TV manually</label>
-          <div class="row">
-            <input type="text" id="ip-input" placeholder="IP address" />
-            <input type="text" id="name-input" placeholder="Nickname" />
-            <button id="save-ip-btn">Add</button>
+        <div class="settings-section">
+          <h2>TV sets</h2>
+          <div id="saved-tvs" class="device-list"></div>
+          <div class="field" style="margin-top: 10px">
+            <div class="row">
+              <input type="text" id="ip-input" placeholder="IP address" />
+              <input type="text" id="name-input" placeholder="Nickname" />
+              <button id="save-ip-btn">Add</button>
+            </div>
+          </div>
+          <div class="field" style="margin-top: 8px">
+            <button id="discover-tv-btn" class="discover-btn">
+              Search for TVs
+            </button>
+            <div id="discover-tv-status" class="discover-status"></div>
+            <div id="discover-tv-results"></div>
           </div>
         </div>
 
-        <div class="field">
-          <label>…or discover automatically</label>
-          <button id="discover-btn">Search for TV</button>
-          <div id="discover-status"></div>
-          <div id="discover-results"></div>
+        <div class="settings-section">
+          <h2>Chromecasts</h2>
+          <div id="saved-chromecasts" class="device-list"></div>
+          <div class="field" style="margin-top: 10px">
+            <div class="row">
+              <input
+                type="text"
+                id="cc-ip-input"
+                placeholder="IP address"
+              />
+              <input
+                type="text"
+                id="cc-name-input"
+                placeholder="Nickname"
+              />
+              <button id="save-cc-btn">Add</button>
+            </div>
+          </div>
+          <div class="field" style="margin-top: 8px">
+            <button id="discover-cc-btn" class="discover-btn">
+              Search for Chromecasts
+            </button>
+            <div id="discover-cc-status" class="discover-status"></div>
+            <div id="discover-cc-results"></div>
+          </div>
         </div>
       </div>
     </div>
