@@ -297,20 +297,27 @@ let mediaMode = "cc"; // "tv" or "cc"
 let ccPlaying = false;
 let ccIconUrl = null;
 let ccProgress = 0;
+let ccTitle = null;
+let ccApp = null;
 
 const mediaToggle = document.getElementById("media-toggle");
 const mediaRew = document.getElementById("media-rew");
 const mediaPlayPause = document.getElementById("media-playpause");
 const mediaFF = document.getElementById("media-ff");
 const mediaProgressBar = document.getElementById("media-progress-bar");
+const mediaTitleEl = document.getElementById("media-title");
 
 function updateCCState(data) {
   const ms = data && data.mediaStatus;
+  ccApp = data && data.app;
   // Playing state
   ccPlaying = ms && ms.playerState === "PLAYING";
   // Extract icon from mediaStatus.media.metadata.images
   const images = ms && ms.media && ms.media.metadata && ms.media.metadata.images;
   ccIconUrl = images && images.length ? images[0].url : null;
+  // Extract title
+  const title = ms && ms.media && ms.media.metadata && ms.media.metadata.title;
+  ccTitle = title && title !== ccApp ? title : null;
   // Extract progress
   if (ms && ms.currentTime > 0 && ms.media && ms.media.duration > 0) {
     ccProgress = ms.currentTime / ms.media.duration;
@@ -358,6 +365,8 @@ function updateMediaButtons() {
   mediaRew.disabled = ccDisabled;
   mediaPlayPause.disabled = ccDisabled;
   mediaFF.disabled = ccDisabled;
+  // Media title
+  mediaTitleEl.textContent = mediaMode === "cc" && ccTitle ? ccTitle : "";
   // Progress bar
   if (mediaMode === "cc" && ccProgress > 0) {
     mediaProgressBar.style.width = (ccProgress * 100).toFixed(1) + "%";
