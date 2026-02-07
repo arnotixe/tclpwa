@@ -4,6 +4,7 @@ const path = require("path");
 const net = require("net");
 const dgram = require("dgram");
 const xml2js = require("xml2js");
+const { Client, DefaultMediaReceiver } = require("castv2-client");
 
 const PORT = process.env.PORT || 8765;
 
@@ -178,6 +179,152 @@ function discoverChromecasts() {
   });
 }
 
+function chromecastControl(ip, action) {
+  return new Promise((resolve, reject) => {
+    const client = new Client();
+    const timeout = setTimeout(() => {
+      client.close();
+      reject(new Error("Chromecast connection timed out"));
+    }, 5000);
+
+    client.on("error", (err) => {
+      clearTimeout(timeout);
+      client.close();
+      reject(err);
+    });
+
+    client.connect(ip, () => {
+      client.getStatus((err, status) => {
+        if (err) {
+          clearTimeout(timeout);
+          client.close();
+          return reject(err);
+        }
+
+        console.log("CC receiver status:", JSON.stringify(status, null, 2));
+
+        const session = status.applications && status.applications[0];
+        if (!session) {
+          clearTimeout(timeout);
+          client.close();
+          return resolve({ ok: false, reason: "no_active_app", receiverStatus: status });
+        }
+
+        client.join(session, DefaultMediaReceiver, (err, player) => {
+          if (err) {
+            clearTimeout(timeout);
+            client.close();
+            return reject(err);
+          }
+
+          // Must fetch media status first to populate currentSession
+          player.getStatus((err, mediaStatus) => {
+            console.log("CC media status:", JSON.stringify(mediaStatus, null, 2));
+
+            if (err) {
+              clearTimeout(timeout);
+              client.close();
+              return reject(err);
+            }
+            if (!player.media.currentSession) {
+              clearTimeout(timeout);
+              client.close();
+              return resolve({ ok: false, reason: "no_media_session", app: session.displayName, mediaStatus });
+            }
+
+            console.log("CC currentSession:", JSON.stringify(player.media.currentSession, null, 2));
+            console.log("CC sending action:", action);
+
+            const done = (err, status) => {
+              console.log("CC action result:", err ? "ERROR: " + err.message : "OK", status ? JSON.stringify(status, null, 2) : "");
+              clearTimeout(timeout);
+              client.close();
+              if (err) reject(err);
+              else resolve({ ok: true, app: session.displayName, mediaStatus, actionResult: status });
+            };
+
+            switch (action) {
+              case "play":
+                player.play(done);
+                break;
+              case "pause":
+                player.pause(done);
+                break;
+              case "stop":
+                player.stop(done);
+                break;
+              default:
+                done(new Error("Unknown action: " + action));
+            }
+          });
+        });
+      });
+    });
+  });
+}
+
+function chromecastStatus(ip) {
+  return new Promise((resolve, reject) => {
+    const client = new Client();
+    const timeout = setTimeout(() => {
+      client.close();
+      reject(new Error("Chromecast connection timed out"));
+    }, 5000);
+
+    client.on("error", (err) => {
+      clearTimeout(timeout);
+      client.close();
+      reject(err);
+    });
+
+    client.connect(ip, () => {
+      client.getStatus((err, status) => {
+        if (err) {
+          clearTimeout(timeout);
+          client.close();
+          return reject(err);
+        }
+
+        console.log("CC status receiver:", JSON.stringify(status, null, 2));
+
+        const session = status.applications && status.applications[0];
+        if (!session) {
+          clearTimeout(timeout);
+          client.close();
+          return resolve({ app: null, media: null, receiverStatus: status });
+        }
+
+        client.join(session, DefaultMediaReceiver, (err, player) => {
+          if (err) {
+            clearTimeout(timeout);
+            client.close();
+            return resolve({ app: session.displayName, media: null });
+          }
+
+          player.getStatus((err, mediaStatus) => {
+            clearTimeout(timeout);
+            client.close();
+
+            console.log("CC status media:", JSON.stringify(mediaStatus, null, 2));
+
+            if (err || !mediaStatus) {
+              return resolve({ app: session.displayName, media: null });
+            }
+            resolve({
+              app: session.displayName,
+              media: {
+                playerState: mediaStatus.playerState,
+                title: mediaStatus.media && mediaStatus.media.metadata && mediaStatus.media.metadata.title,
+              },
+              mediaStatus,
+            });
+          });
+        });
+      });
+    });
+  });
+}
+
 function readBody(req) {
   return new Promise((resolve) => {
     let body = "";
@@ -224,6 +371,44 @@ const server = http.createServer(async (req, res) => {
       const ccs = await discoverChromecasts();
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(ccs));
+    } catch (err) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/api/chromecast/control") {
+    const body = JSON.parse(await readBody(req));
+    const { ip, action } = body;
+    if (!ip || !action) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "ip and action are required" }));
+      return;
+    }
+    try {
+      await chromecastControl(ip, action);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true }));
+    } catch (err) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/api/chromecast/status") {
+    const body = JSON.parse(await readBody(req));
+    const { ip } = body;
+    if (!ip) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "ip is required" }));
+      return;
+    }
+    try {
+      const status = await chromecastStatus(ip);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(status));
     } catch (err) {
       res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: err.message }));

@@ -189,6 +189,40 @@
       .media-row button {
         font-size: 1rem;
       }
+      .media-toggle {
+        font-size: 0.75rem !important;
+        font-weight: 700;
+        min-width: 40px;
+        padding: 8px;
+        background: #242438;
+        border: none;
+        color: #888;
+        overflow: hidden;
+      }
+      .media-toggle img {
+        width: 24px;
+        height: 24px;
+        border-radius: 4px;
+        display: block;
+      }
+      .media-toggle:active {
+        background: #2d2d44;
+      }
+      .media-btn:disabled {
+        opacity: 0.3;
+        cursor: default;
+      }
+      .media-progress {
+        width: 80%;
+        height: 5px;
+        background: #333;
+      }
+      .media-progress-bar {
+        height: 100%;
+        background: #888;
+        width: 0%;
+        transition: width 0.3s ease;
+      }
 
       /* Separator */
       .sep {
@@ -239,7 +273,6 @@
       .settings .row button {
         white-space: nowrap;
       }
-
 
       .back-link {
         color: #aaa;
@@ -357,13 +390,28 @@
     <!-- CONTROL PAGE -->
     <div id="page-control" class="page active">
       <header>
-        <button class="power" data-key="TR_KEY_POWER" style="padding:8px 10px"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M5.636 5.636a9 9 0 1 0 12.728 0M12 3v9"/></svg></button>
+        <button class="power" data-key="TR_KEY_POWER" style="padding: 8px 10px">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke-width="1.5"
+            stroke="currentColor"
+            width="20"
+            height="20"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M5.636 5.636a9 9 0 1 0 12.728 0M12 3v9"
+            />
+          </svg>
+        </button>
         <h1 id="tv-ip-display"></h1>
         <a href="#" id="settings-link" title="Settings">&#9881;</a>
       </header>
 
       <div class="remote">
-
         <!-- D-Pad -->
         <div class="dpad">
           <button class="nav up" data-key="TR_KEY_UP">&#9650;</button>
@@ -469,69 +517,20 @@
 
         <div class="sep"></div>
 
-        <!-- Media controls -->
-        <!-- <div class="btn-row media-row">
-          <button data-key="TR_KEY_REW"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M21 16.811c0 .864-.933 1.406-1.683.977l-7.108-4.061a1.125 1.125 0 0 1 0-1.954l7.108-4.061A1.125 1.125 0 0 1 21 8.689v8.122ZM11.25 16.811c0 .864-.933 1.406-1.683.977l-7.108-4.061a1.125 1.125 0 0 1 0-1.954l7.108-4.061a1.125 1.125 0 0 1 1.683.977v8.122Z"/></svg></button>
-          <button data-key="TR_KEY_PLAYPAUSE"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M21 7.5V18M15 7.5V18M3 16.811V8.69c0-.864.933-1.406 1.683-.977l7.108 4.061a1.125 1.125 0 0 1 0 1.954l-7.108 4.061A1.125 1.125 0 0 1 3 16.811Z"/></svg></button>
-          <button data-key="TR_KEY_FF"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M3 8.689c0-.864.933-1.406 1.683-.977l7.108 4.061a1.125 1.125 0 0 1 0 1.954l-7.108 4.061A1.125 1.125 0 0 1 3 16.811V8.69ZM12.75 8.689c0-.864.933-1.406 1.683-.977l7.108 4.061a1.125 1.125 0 0 1 0 1.954l-7.108 4.061a1.125 1.125 0 0 1-1.683-.977V8.69Z"/></svg></button>
-        </div> -->
-
-        <!-- Chromecast buttons -->
+        <!-- Media controls with TV/CC toggle -->
         <div class="btn-row media-row">
-          <button data-key="TR_KEY_REW">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke-width="1.5"
-              stroke="currentColor"
-              width="20"
-              height="20"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M21 16.811c0 .864-.933 1.406-1.683.977l-7.108-4.061a1.125 1.125 0 0 1 0-1.954l7.108-4.061A1.125 1.125 0 0 1 21 8.689v8.122ZM11.25 16.811c0 .864-.933 1.406-1.683.977l-7.108-4.061a1.125 1.125 0 0 1 0-1.954l7.108-4.061a1.125 1.125 0 0 1 1.683.977v8.122Z"
-              />
-            </svg>
+          <button id="media-toggle" class="media-toggle">CC</button>
+          <button id="media-rew" class="media-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M21 16.811c0 .864-.933 1.406-1.683.977l-7.108-4.061a1.125 1.125 0 0 1 0-1.954l7.108-4.061A1.125 1.125 0 0 1 21 8.689v8.122ZM11.25 16.811c0 .864-.933 1.406-1.683.977l-7.108-4.061a1.125 1.125 0 0 1 0-1.954l7.108-4.061a1.125 1.125 0 0 1 1.683.977v8.122Z"/></svg>
           </button>
-          <button data-key="TR_KEY_PLAYPAUSE">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke-width="1.5"
-              stroke="currentColor"
-              width="20"
-              height="20"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M21 7.5V18M15 7.5V18M3 16.811V8.69c0-.864.933-1.406 1.683-.977l7.108 4.061a1.125 1.125 0 0 1 0 1.954l-7.108 4.061A1.125 1.125 0 0 1 3 16.811Z"
-              />
-            </svg>
+          <button id="media-playpause" class="media-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M21 7.5V18M15 7.5V18M3 16.811V8.69c0-.864.933-1.406 1.683-.977l7.108 4.061a1.125 1.125 0 0 1 0 1.954l-7.108 4.061A1.125 1.125 0 0 1 3 16.811Z"/></svg>
           </button>
-          <button data-key="TR_KEY_FF">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke-width="1.5"
-              stroke="currentColor"
-              width="20"
-              height="20"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M3 8.689c0-.864.933-1.406 1.683-.977l7.108 4.061a1.125 1.125 0 0 1 0 1.954l-7.108 4.061A1.125 1.125 0 0 1 3 16.811V8.69ZM12.75 8.689c0-.864.933-1.406 1.683-.977l7.108 4.061a1.125 1.125 0 0 1 0 1.954l-7.108 4.061a1.125 1.125 0 0 1-1.683-.977V8.69Z"
-              />
-            </svg>
+          <button id="media-ff" class="media-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M3 8.689c0-.864.933-1.406 1.683-.977l7.108 4.061a1.125 1.125 0 0 1 0 1.954l-7.108 4.061A1.125 1.125 0 0 1 3 16.811V8.69ZM12.75 8.689c0-.864.933-1.406 1.683-.977l7.108 4.061a1.125 1.125 0 0 1 0 1.954l-7.108 4.061a1.125 1.125 0 0 1-1.683-.977V8.69Z"/></svg>
           </button>
         </div>
-
-        <div class="sep"></div>
+        <div class="media-progress"><div id="media-progress-bar" class="media-progress-bar"></div></div>
 
         <!-- Number pad -->
         <div class="numpad">
@@ -584,16 +583,8 @@
           <div id="saved-chromecasts" class="device-list"></div>
           <div class="field" style="margin-top: 10px">
             <div class="row">
-              <input
-                type="text"
-                id="cc-ip-input"
-                placeholder="IP address"
-              />
-              <input
-                type="text"
-                id="cc-name-input"
-                placeholder="Nickname"
-              />
+              <input type="text" id="cc-ip-input" placeholder="IP address" />
+              <input type="text" id="cc-name-input" placeholder="Nickname" />
               <button id="save-cc-btn">Add</button>
             </div>
           </div>

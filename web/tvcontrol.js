@@ -250,6 +250,7 @@ function renderSavedChromecasts() {
     onSelect: (ip) => {
       setActiveChromecastIP(ip);
       renderSavedChromecasts();
+      fetchChromecastStatus();
     },
     onRemove: removeChromecast,
     onRename: renameChromecast,
@@ -290,6 +291,135 @@ document.querySelectorAll("[data-key]").forEach((btn) => {
     if (key) sendKey(key);
   });
 });
+
+// -- Media controls: TV/CC toggle --
+let mediaMode = "cc"; // "tv" or "cc"
+let ccPlaying = false;
+let ccIconUrl = null;
+let ccProgress = 0;
+
+const mediaToggle = document.getElementById("media-toggle");
+const mediaRew = document.getElementById("media-rew");
+const mediaPlayPause = document.getElementById("media-playpause");
+const mediaFF = document.getElementById("media-ff");
+const mediaProgressBar = document.getElementById("media-progress-bar");
+
+function updateCCState(data) {
+  const ms = data && data.mediaStatus;
+  // Playing state
+  ccPlaying = ms && ms.playerState === "PLAYING";
+  // Extract icon from mediaStatus.media.metadata.images
+  const images = ms && ms.media && ms.media.metadata && ms.media.metadata.images;
+  ccIconUrl = images && images.length ? images[0].url : null;
+  // Extract progress
+  if (ms && ms.currentTime > 0 && ms.media && ms.media.duration > 0) {
+    ccProgress = ms.currentTime / ms.media.duration;
+  } else {
+    ccProgress = 0;
+  }
+}
+
+async function fetchChromecastStatus() {
+  const ip = getActiveChromecastIP();
+  if (!ip) {
+    ccIconUrl = null;
+    ccProgress = 0;
+    updateMediaButtons();
+    return;
+  }
+  try {
+    const res = await fetch("/api/chromecast/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ip }),
+    });
+    const status = await res.json();
+    console.log("CC status:", status);
+    updateCCState(status);
+  } catch (err) {
+    console.error("Chromecast status error:", err);
+  }
+  updateMediaButtons();
+}
+
+function updateMediaButtons() {
+  // Toggle button: show icon or text
+  if (mediaMode === "cc" && ccIconUrl) {
+    mediaToggle.innerHTML = "";
+    const img = document.createElement("img");
+    img.src = ccIconUrl;
+    img.alt = "CC";
+    mediaToggle.appendChild(img);
+  } else {
+    mediaToggle.innerHTML = "";
+    mediaToggle.textContent = mediaMode === "cc" ? "CC" : "TV";
+  }
+  const ccDisabled = mediaMode === "cc" && !getActiveChromecastIP();
+  mediaRew.disabled = ccDisabled;
+  mediaPlayPause.disabled = ccDisabled;
+  mediaFF.disabled = ccDisabled;
+  // Progress bar
+  if (mediaMode === "cc" && ccProgress > 0) {
+    mediaProgressBar.style.width = (ccProgress * 100).toFixed(1) + "%";
+  } else {
+    mediaProgressBar.style.width = "0%";
+  }
+}
+
+mediaToggle.addEventListener("click", () => {
+  mediaMode = mediaMode === "cc" ? "tv" : "cc";
+  updateMediaButtons();
+});
+
+async function sendChromecastCommand(action) {
+  const ip = getActiveChromecastIP();
+  if (!ip) return;
+  try {
+    const res = await fetch("/api/chromecast/control", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ip, action }),
+    });
+    const data = await res.json();
+    console.log("CC control:", data);
+    if (!res.ok) {
+      console.error("Chromecast command failed:", data.error);
+    } else if (data.reason) {
+      await fetchChromecastStatus();
+    } else {
+      updateCCState(data);
+      updateMediaButtons();
+    }
+  } catch (err) {
+    console.error("Chromecast error:", err);
+  }
+}
+
+mediaRew.addEventListener("click", () => {
+  if (mediaMode === "tv") {
+    sendKey("TR_KEY_REW");
+  }
+  // CC rewind not supported yet
+});
+
+mediaPlayPause.addEventListener("click", () => {
+  if (mediaMode === "tv") {
+    sendKey("TR_KEY_PLAYPAUSE");
+  } else {
+    const action = ccPlaying ? "pause" : "play";
+    sendChromecastCommand(action);
+    ccPlaying = !ccPlaying;
+  }
+});
+
+mediaFF.addEventListener("click", () => {
+  if (mediaMode === "tv") {
+    sendKey("TR_KEY_FF");
+  }
+  // CC forward not supported yet
+});
+
+updateMediaButtons();
 
 // -- Settings: Add TV manually --
 document.getElementById("save-ip-btn").addEventListener("click", () => {
@@ -396,3 +526,32 @@ if (oldIP && getTVs().length === 0) {
 
 // -- Init --
 updateStatus();
+fetchChromecastStatus();
+
+// -- Periodic Chromecast status polling --
+let ccPollTimer = null;
+
+function startCCPoll() {
+  stopCCPoll();
+  ccPollTimer = setInterval(() => {
+    if (getActiveChromecastIP()) fetchChromecastStatus();
+  }, 15000);
+}
+
+function stopCCPoll() {
+  if (ccPollTimer) {
+    clearInterval(ccPollTimer);
+    ccPollTimer = null;
+  }
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    stopCCPoll();
+  } else {
+    fetchChromecastStatus();
+    startCCPoll();
+  }
+});
+
+startCCPoll();

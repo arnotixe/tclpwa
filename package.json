@@ -4,6 +4,7 @@
     "start": "node server.js"
   },
   "dependencies": {
+    "castv2-client": "^1.2.0",
     "xml2js": "^0.6.2"
   }
 }
