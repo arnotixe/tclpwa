@@ -82,9 +82,17 @@ Claude was kind enough to build a version for us.
 
 ## Docker
 
+docker stop tvctl
+docker rm tvctl
 docker build -t tvctl .
-docker run -d --net=host --restart unless-stopped --name tvctl tvctl
-visit http://192.168.1.130:8765/ to "install" it
+docker run -d --net=host --restart unless-stopped --name tvctl \
+ -v /home/arno/jobb/opensource/tvctl/cert.pem:/app/cert.pem:ro \
+ -v /home/arno/jobb/opensource/tvctl/key.pem:/app/key.pem:ro \
+ tvctl
+docker start tvctl
+
+visit http://192.168.1.130:8765/ to run it,
+visit https://192.168.1.130:8766/ to allow for PWA installation (see settings page)
 
 ### can after that start/stop with
 

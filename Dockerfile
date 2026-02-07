@@ -7,6 +7,7 @@ RUN npm ci --production
 
 COPY server.js ./
 COPY web/ ./web/
+COPY rootCA.pem ./
 
 EXPOSE 8765 8766
 

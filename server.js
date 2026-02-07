@@ -498,10 +498,7 @@ const server = http.createServer(async (req, res) => {
 
   // Serve mkcert root CA for phone installation
   if (req.method === "GET" && req.url === "/rootCA.pem") {
-    const caPath = path.join(
-      process.env.HOME || process.env.USERPROFILE || "",
-      ".local/share/mkcert/rootCA.pem"
-    );
+    const caPath = path.join(__dirname, "rootCA.pem");
     try {
       const content = fs.readFileSync(caPath);
       res.writeHead(200, {
@@ -511,7 +508,7 @@ const server = http.createServer(async (req, res) => {
       res.end(content);
     } catch {
       res.writeHead(404);
-      res.end("rootCA.pem not found. Run: mkcert -install");
+      res.end("rootCA.pem not found");
     }
     return;
   }
