@@ -258,6 +258,16 @@ function chromecastControl(ip, action) {
               case "stop":
                 player.stop(done);
                 break;
+              case "rew":
+              case "ff": {
+                const delta = action === "ff" ? 10 : -10;
+                const cur = (mediaStatus && mediaStatus.currentTime) || 0;
+                const dur = player.media.currentSession && mediaStatus && mediaStatus.media && mediaStatus.media.duration;
+                let target = Math.max(0, cur + delta);
+                if (dur > 0) target = Math.min(target, dur);
+                player.seek(target, done);
+                break;
+              }
               default:
                 done(new Error("Unknown action: " + action));
             }

@@ -632,6 +632,8 @@ async function sendChromecastCommand(action) {
       console.error("Chromecast command failed:", data.error);
     } else if (data.reason) {
       await fetchChromecastStatus();
+    } else if (action === "rew" || action === "ff") {
+      setTimeout(fetchChromecastStatus, 500);
     } else {
       // Toggle playing state immediately, then refresh full status
       ccPlaying = !ccPlaying;
@@ -648,8 +650,9 @@ mediaRew.addEventListener("click", () => {
     sendKey("TR_KEY_REW");
   } else if (mediaMode === "ur") {
     urCall(UR_PRIME_SEARCH, "rewind15");
+  } else {
+    sendChromecastCommand("rew");
   }
-  // CC rewind not supported yet
 });
 
 mediaPlayPause.addEventListener("click", () => {
@@ -669,8 +672,9 @@ mediaFF.addEventListener("click", () => {
     sendKey("TR_KEY_FF");
   } else if (mediaMode === "ur") {
     urCall(UR_PRIME_SEARCH, "forward15");
+  } else {
+    sendChromecastCommand("ff");
   }
-  // CC forward not supported yet
 });
 
 // -- Unified Remote commands --
