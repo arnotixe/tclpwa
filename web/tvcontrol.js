@@ -503,7 +503,10 @@ function updateMediaButtons() {
   mediaRew.disabled = ccDisabled;
   mediaPlayPause.disabled = ccDisabled;
   mediaFF.disabled = ccDisabled;
-  mediaTracksBtn.disabled = mediaMode !== "cc" || ccTracks.length === 0;
+  mediaTracksBtn.disabled =
+    mediaMode === "ur"
+      ? !getActiveURBase()
+      : mediaMode !== "cc" || ccTracks.length === 0;
   // Media title
   mediaTitleEl.textContent = mediaMode === "cc" && ccTitle ? ccTitle : "";
   // Progress bar
@@ -608,7 +611,9 @@ async function selectTrack(type, trackId) {
 }
 
 mediaTracksBtn.addEventListener("click", () => {
-  if (tracksDropdown.classList.contains("open")) {
+  if (mediaMode === "ur") {
+    urCall(UR_PRIME_SEARCH, "subs"); // cycles Off -> English -> Spanish
+  } else if (tracksDropdown.classList.contains("open")) {
     closeTracksDropdown();
   } else {
     openTracksDropdown();

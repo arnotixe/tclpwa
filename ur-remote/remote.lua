@@ -201,6 +201,146 @@ actions.seek = function(seconds)
 	seek_by(seconds);
 end
 
+-- Run JS in the Prime tab and return its result as a string.
+local function tab_js(js)
+	return tostring(script.apple(
+		'tell application "Google Chrome"',
+		FIND_TAB,
+		'if theTab is missing value then return "ERR: no Prime Video tab open"',
+		'return execute theTab javascript "' .. as_literal(js) .. '"',
+		'end tell'
+	) or "");
+end
+
+-- Prime only renders its player controls while it sees real mouse movement
+-- (synthetic DOM events are ignored), so move the OS cursor over the Chrome
+-- window until `probe_js` returns "1". Needs Accessibility for Unified Remote.
+local function wake_controls(probe_js)
+	local b = tostring(script.apple(
+		'tell application "Google Chrome"',
+		FIND_TAB,
+		'if theTab is missing value then return "ERR"',
+		'set active tab index of theWindow to theIndex',
+		'set index of theWindow to 1',
+		'activate',
+		'delay 0.3',
+		'set b to bounds of theWindow',
+		'return ((item 1 of b) as text) & "," & ((item 2 of b) as text) & "," & ((item 3 of b) as text) & "," & ((item 4 of b) as text)',
+		'end tell'
+	) or "");
+	local x1, y1, x2, y2 = b:match("^(-?%d+),(-?%d+),(-?%d+),(-?%d+)$");
+	if not x1 then
+		print("PrimeSearch: wake: no Chrome window (" .. b .. ")");
+		return false;
+	end
+	local cx = (tonumber(x1) + tonumber(x2)) / 2;
+	local cy = (tonumber(y1) + tonumber(y2)) / 2;
+	for i = 1, 8 do
+		libs.mouse.moveto(cx + (i % 2 == 0 and 12 or -12), cy + i * 3);
+		script.apple('delay 0.15');
+		if tab_js(probe_js) == "1" then return true; end
+	end
+	return false;
+end
+
+-- Poll the Prime tab until `js` returns "1" (max ~3 s).
+local function wait_js(js)
+	for i = 1, 15 do
+		if tab_js(js) == "1" then return true; end
+		script.apple('delay 0.2');
+	end
+	return false;
+end
+
+local function click_js(id)
+	return "(function(){var e=document.getElementById('" .. id .. "');if(!e)return '0';e.click();return '1';})()";
+end
+
+local function exists_js(sel)
+	return "document.querySelector(\"" .. sel .. "\")?'1':'0'";
+end
+
+-- Reads the open subtitles menu as "<current index>|<label>=<value>\n..." (0-based).
+local READ_SUBS_JS = [==[
+(function(){
+  var r = Array.from(document.querySelectorAll('input[name="subtitle"]'));
+  var cur = -1;
+  var rows = r.map(function (i, n) {
+    if (i.checked) cur = n;
+    var l = i.closest('label');
+    return ((l ? l.textContent : '').replace(/CC$/, '').trim()) + '=' + i.value;
+  });
+  return cur + '|' + rows.join('\n');
+})()
+]==];
+
+-- Language bucket of a subtitle option: off / en / es (nil = ignore).
+local function sub_kind(label, value)
+	if label:lower() == "off" or value:lower():match("^off") or value == "" then return "off"; end
+	local v = value:lower();
+	if v:match("^en") then return "en"; end
+	if v:match("^es") then return "es"; end
+	return nil;
+end
+
+--@help Cycle subtitles Off -> English -> Spanish (only languages the title has)
+actions.subs = function()
+	if not wake_controls("document.getElementById('atvwebplayersdk-settings-button')?'1':'0'") then
+		print("PrimeSearch: subs: player controls did not appear");
+		return;
+	end
+	-- the gear toggles the menu, so only click it when the menu is closed
+	if tab_js(exists_js("#atvwebplayersdk-settings-menu")) ~= "1" then
+		tab_js(click_js("atvwebplayersdk-settings-button"));
+	end
+	if not wait_js(exists_js("#atvwebplayersdk-subtitles-button, #atvwebplayersdk-subtitles-menu")) then
+		print("PrimeSearch: subs: settings menu did not open");
+		return;
+	end
+	if tab_js(exists_js("#atvwebplayersdk-subtitles-menu")) ~= "1" then
+		tab_js(click_js("atvwebplayersdk-subtitles-button"));
+	end
+	if not wait_js(exists_js("input[name='subtitle']")) then
+		print("PrimeSearch: subs: no subtitle options");
+		return;
+	end
+	local out = tab_js(READ_SUBS_JS);
+	local cur, rest = out:match("^(-?%d+)|(.*)$");
+	cur = tonumber(cur);
+	if not cur then
+		print("PrimeSearch: subs: unreadable menu: " .. out);
+		return;
+	end
+	local opts, order, n = {}, { "off", "en", "es" }, 0;
+	for line in rest:gmatch("[^\n]+") do
+		local label, value = line:match("^(.*)=(.-)$");
+		if label then
+			local kind = sub_kind(label, value);
+			if kind and not opts[kind] then opts[kind] = n; end
+			if n == cur then opts.current = kind; end
+		end
+		n = n + 1;
+	end
+	local avail = {};
+	for _, k in ipairs(order) do
+		if opts[k] ~= nil then table.insert(avail, k); end
+	end
+	local pos = 1;
+	for i, k in ipairs(avail) do
+		if k == opts.current then pos = i; end
+	end
+	local nextk = avail[(pos % #avail) + 1];
+	local res = tab_js("(function(){var r=document.querySelectorAll('input[name=\"subtitle\"]')[" .. opts[nextk] .. "];if(!r)return '0';r.click();return '1';})()");
+	print("PrimeSearch: subs " .. tostring(opts.current) .. " -> " .. tostring(nextk) .. " (" .. res .. ")");
+	script.apple('delay 0.3');
+	-- close the menu so the controls can hide again
+	tab_js("(function(){var b=document.querySelector('#atvwebplayersdk-subtitles-menu button[aria-label=\"Close\"]');if(b)b.click();})()");
+	script.apple('delay 0.3');
+	if tab_js(exists_js("#atvwebplayersdk-settings-menu")) == "1" then
+		tab_js(click_js("atvwebplayersdk-settings-button"));
+	end
+end
+
 --@help Go to the Prime Video home page, or to a given Prime Video URL
 --@param url (optional)
 actions.home = function(url)
