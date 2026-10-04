@@ -3,6 +3,9 @@
 //   tvctl_tvs: [{ip, name}, ...]
 //   tvctl_active: "ip"
 //   tvctl_chromecasts: [{ip, name}, ...]
+//   tvctl_ur: [{ip, name}, ...]   (ip = Unified Remote base URL, e.g. http://192.168.1.111:9510)
+//   tvctl_active_ur: "baseUrl"
+//   tvctl_ur_series: [{label, url}, ...]
 
 const TRASH_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"/></svg>';
@@ -119,6 +122,81 @@ function renameChromecast(ip, newName) {
   renameDevice("tvctl_chromecasts", ip, newName);
 }
 
+// -- Unified Remote state --
+// Server entries reuse the generic device helpers; their "ip" holds the base URL.
+function getURs() {
+  return getDevices("tvctl_ur");
+}
+
+function getActiveURBase() {
+  return localStorage.getItem("tvctl_active_ur") || "";
+}
+
+function setActiveURBase(url) {
+  localStorage.setItem("tvctl_active_ur", url);
+}
+
+function normalizeURBase(input) {
+  let s = (input || "").trim();
+  if (!s) return "";
+  if (!/^https?:\/\//i.test(s)) s = "http://" + s;
+  try {
+    const u = new URL(s);
+    if (!u.port && u.protocol === "http:") u.port = "9510";
+    return u.origin; // drops /web/ etc: the API lives at /client/...
+  } catch {
+    return "";
+  }
+}
+
+function addUR(url, name) {
+  const base = normalizeURBase(url);
+  if (!base) return false;
+  addDevice("tvctl_ur", base, name);
+  if (!getActiveURBase()) setActiveURBase(base);
+  return true;
+}
+
+function removeUR(url) {
+  removeDevice("tvctl_ur", url);
+  if (getActiveURBase() === url) {
+    const urs = getURs();
+    setActiveURBase(urs.length ? urs[0].ip : "");
+  }
+  renderSavedURs();
+  updateMediaButtons();
+}
+
+function renameUR(url, newName) {
+  renameDevice("tvctl_ur", url, newName);
+}
+
+// -- UR series (label + Prime Video URL) --
+function getSeries() {
+  try {
+    return JSON.parse(localStorage.getItem("tvctl_ur_series")) || [];
+  } catch {
+    return [];
+  }
+}
+
+function saveSeries(list) {
+  localStorage.setItem("tvctl_ur_series", JSON.stringify(list));
+}
+
+function addSeries(label, url) {
+  const list = getSeries();
+  const existing = list.find((x) => x.url === url);
+  if (existing) existing.label = label || existing.label;
+  else list.push({ label: label || url, url });
+  saveSeries(list);
+}
+
+function removeSeries(url) {
+  saveSeries(getSeries().filter((x) => x.url !== url));
+  renderSavedSeries();
+}
+
 // -- Navigation --
 const pageControl = document.getElementById("page-control");
 const pageSettings = document.getElementById("page-settings");
@@ -141,8 +219,11 @@ function showPage(name) {
     document.getElementById("name-input").value = "";
     document.getElementById("cc-ip-input").value = "";
     document.getElementById("cc-name-input").value = "";
-    renderSavedTVs();
-    renderSavedChromecasts();
+    document.getElementById("ur-url-input").value = "";
+    document.getElementById("ur-name-input").value = "";
+    document.getElementById("series-label-input").value = "";
+    document.getElementById("series-url-input").value = "";
+    renderAll();
   }
 }
 
@@ -257,9 +338,53 @@ function renderSavedChromecasts() {
   });
 }
 
+function renderSavedURs() {
+  renderDeviceList("saved-ur", getURs(), {
+    activeIP: getActiveURBase(),
+    onSelect: (url) => {
+      setActiveURBase(url);
+      renderSavedURs();
+      updateMediaButtons();
+    },
+    onRemove: removeUR,
+    onRename: renameUR,
+  });
+}
+
+function renderSavedSeries() {
+  const container = document.getElementById("saved-series");
+  container.innerHTML = "";
+  getSeries().forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "saved-tv";
+
+    const info = document.createElement("div");
+    info.className = "tv-info";
+    const nameEl = document.createElement("div");
+    nameEl.className = "tv-name";
+    nameEl.textContent = item.label;
+    const urlEl = document.createElement("div");
+    urlEl.className = "tv-ip";
+    urlEl.textContent = item.url;
+    info.appendChild(nameEl);
+    info.appendChild(urlEl);
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "del-btn";
+    delBtn.innerHTML = TRASH_SVG;
+    delBtn.addEventListener("click", () => removeSeries(item.url));
+
+    row.appendChild(info);
+    row.appendChild(delBtn);
+    container.appendChild(row);
+  });
+}
+
 function renderAll() {
   renderSavedTVs();
   renderSavedChromecasts();
+  renderSavedURs();
+  renderSavedSeries();
 }
 
 // -- Send key command --
@@ -293,7 +418,7 @@ document.querySelectorAll("[data-key]").forEach((btn) => {
 });
 
 // -- Media controls: TV/CC toggle --
-let mediaMode = "cc"; // "tv" or "cc"
+let mediaMode = "cc"; // "tv", "cc" or "ur"
 let ccPlaying = false;
 let ccIconUrl = null;
 let ccProgress = 0;
@@ -311,6 +436,7 @@ const mediaTitleEl = document.getElementById("media-title");
 const mediaTracksBtn = document.getElementById("media-tracks-btn");
 const tracksDropdown = document.getElementById("tracks-dropdown");
 const tracksBackdrop = document.getElementById("tracks-backdrop");
+const urPane = document.getElementById("ur-pane");
 
 function updateCCState(data) {
   const ms = data && data.mediaStatus;
@@ -369,7 +495,11 @@ function updateMediaButtons() {
     mediaToggle.innerHTML = "";
     mediaToggle.textContent = mediaMode === "cc" ? "CC" : "TV";
   }
-  const ccDisabled = mediaMode === "cc" && !getActiveChromecastIP();
+  if (mediaMode === "ur") mediaToggle.textContent = "UR";
+  urPane.hidden = mediaMode !== "ur";
+  const ccDisabled =
+    (mediaMode === "cc" && !getActiveChromecastIP()) ||
+    (mediaMode === "ur" && !getActiveURBase());
   mediaRew.disabled = ccDisabled;
   mediaPlayPause.disabled = ccDisabled;
   mediaFF.disabled = ccDisabled;
@@ -385,7 +515,7 @@ function updateMediaButtons() {
 }
 
 mediaToggle.addEventListener("click", () => {
-  mediaMode = mediaMode === "cc" ? "tv" : "cc";
+  mediaMode = mediaMode === "cc" ? "tv" : mediaMode === "tv" ? "ur" : "cc";
   updateMediaButtons();
 });
 
@@ -516,6 +646,8 @@ async function sendChromecastCommand(action) {
 mediaRew.addEventListener("click", () => {
   if (mediaMode === "tv") {
     sendKey("TR_KEY_REW");
+  } else if (mediaMode === "ur") {
+    urCall(UR_PRIME_SEARCH, "rewind15");
   }
   // CC rewind not supported yet
 });
@@ -523,6 +655,8 @@ mediaRew.addEventListener("click", () => {
 mediaPlayPause.addEventListener("click", () => {
   if (mediaMode === "tv") {
     sendKey("TR_KEY_PLAYPAUSE");
+  } else if (mediaMode === "ur") {
+    urCall(UR_PRIME_VIDEO, "play_pause");
   } else {
     const action = ccPlaying ? "pause" : "play";
     sendChromecastCommand(action);
@@ -533,11 +667,201 @@ mediaPlayPause.addEventListener("click", () => {
 mediaFF.addEventListener("click", () => {
   if (mediaMode === "tv") {
     sendKey("TR_KEY_FF");
+  } else if (mediaMode === "ur") {
+    urCall(UR_PRIME_SEARCH, "forward15");
   }
   // CC forward not supported yet
 });
 
+// -- Unified Remote commands --
+// Arno.PrimeSearch is the custom remote in prime-search/ (copy it to the UR
+// server); Unified.AmazonPrimeVideo ships with Unified Remote.
+const UR_PRIME_SEARCH = "Arno.PrimeSearch";
+const UR_PRIME_VIDEO = "Unified.AmazonPrimeVideo";
+
+async function urCall(id, name, values) {
+  const baseUrl = getActiveURBase();
+  if (!baseUrl) {
+    alert("No Unified Remote server configured. Go to Settings to add one.");
+    return;
+  }
+  try {
+    const res = await fetch("/api/ur/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ baseUrl, id, name, values }),
+    });
+    const data = await res.json();
+    if (!res.ok) console.error("UR command failed:", data.error);
+  } catch (err) {
+    console.error("UR error:", err);
+  }
+}
+
+document
+  .getElementById("ur-home")
+  .addEventListener("click", () => urCall(UR_PRIME_SEARCH, "home"));
+document
+  .getElementById("ur-resume")
+  .addEventListener("click", () => urCall(UR_PRIME_SEARCH, "resume"));
+document
+  .getElementById("ur-fullscreen")
+  .addEventListener("click", () => urCall(UR_PRIME_VIDEO, "fullscreen"));
+
+const urSearchInput = document.getElementById("ur-search-input");
+function urSearch() {
+  const text = urSearchInput.value.trim();
+  if (text) urCall(UR_PRIME_SEARCH, "search", [text]);
+}
+document.getElementById("ur-search-btn").addEventListener("click", urSearch);
+urSearchInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") urSearch();
+});
+
+// -- Picker (Series / Seasons / Episodes) --
+// Items are {label, url}; tapping one opens the url in the Prime tab.
+const seriesDropdown = document.getElementById("series-dropdown");
+const seriesBackdrop = document.getElementById("series-backdrop");
+
+function closeSeriesDropdown() {
+  seriesDropdown.classList.remove("open");
+  seriesBackdrop.classList.remove("open");
+}
+
+function showPicker(items, message) {
+  seriesDropdown.innerHTML = "";
+  if (message || items.length === 0) {
+    const note = document.createElement("div");
+    note.className = "series-empty";
+    note.textContent = message || "Nothing to show.";
+    seriesDropdown.appendChild(note);
+  }
+  items.forEach((item) => {
+    const btn = document.createElement("button");
+    btn.className = "series-item";
+    btn.textContent = item.label;
+    btn.addEventListener("click", () => {
+      urCall(UR_PRIME_SEARCH, "home", [item.url]);
+      closeSeriesDropdown();
+    });
+    seriesDropdown.appendChild(btn);
+  });
+  seriesDropdown.classList.add("open");
+  seriesBackdrop.classList.add("open");
+}
+
+document.getElementById("ur-series").addEventListener("click", () => {
+  const list = getSeries().map((x) => ({ label: x.label, url: x.url }));
+  showPicker(list, list.length ? "" : "No series saved. Add some in Settings.");
+});
+
+// Seasons / episodes are read from the open Prime tab by the UR remote and
+// come back through the server (see /api/ur/list).
+async function showUrList(kind) {
+  const baseUrl = getActiveURBase();
+  if (!baseUrl) {
+    alert("No Unified Remote server configured. Go to Settings to add one.");
+    return;
+  }
+  showPicker([], "Loading " + kind + "...");
+  try {
+    const res = await fetch("/api/ur/list", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ baseUrl, kind }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showPicker([], data.error || "Failed to load " + kind);
+      return;
+    }
+    const items =
+      kind === "seasons"
+        ? (data.seasons || []).map((x) => ({ label: x.name, url: x.url }))
+        : (data.episodes || []).map((x) => ({ label: x.title, url: x.url }));
+    const hint = items.length
+      ? ""
+      : kind === "seasons"
+        ? "No seasons found. Open a series page first."
+        : "No episodes found. Open a season page first.";
+    showPicker(items.filter((x) => x.url), hint);
+  } catch (err) {
+    showPicker([], "Error: " + err.message);
+  }
+}
+
+document
+  .getElementById("ur-seasons")
+  .addEventListener("click", () => showUrList("seasons"));
+document
+  .getElementById("ur-episodes")
+  .addEventListener("click", () => showUrList("episodes"));
+seriesBackdrop.addEventListener("click", closeSeriesDropdown);
+
 updateMediaButtons();
+
+// -- Settings: Add Unified Remote server manually --
+document.getElementById("save-ur-btn").addEventListener("click", () => {
+  const url = document.getElementById("ur-url-input").value.trim();
+  const name = document.getElementById("ur-name-input").value.trim();
+  if (addUR(url, name)) {
+    renderSavedURs();
+    updateMediaButtons();
+    document.getElementById("ur-url-input").value = "";
+    document.getElementById("ur-name-input").value = "";
+  } else {
+    alert("Enter a valid URL, e.g. http://192.168.1.111:9510");
+  }
+});
+
+// -- Settings: Add series --
+document.getElementById("save-series-btn").addEventListener("click", () => {
+  const label = document.getElementById("series-label-input").value.trim();
+  const url = document.getElementById("series-url-input").value.trim();
+  if (!url) return;
+  addSeries(label, url);
+  renderSavedSeries();
+  document.getElementById("series-label-input").value = "";
+  document.getElementById("series-url-input").value = "";
+});
+
+// -- Settings: Discover Unified Remote servers --
+document
+  .getElementById("discover-ur-btn")
+  .addEventListener("click", async () => {
+    const statusEl = document.getElementById("discover-ur-status");
+    const resultsEl = document.getElementById("discover-ur-results");
+    statusEl.textContent = "Searching...";
+    resultsEl.innerHTML = "";
+
+    try {
+      const res = await fetch("/api/ur/discover", { method: "POST" });
+      const servers = await res.json();
+
+      if (servers.length === 0) {
+        statusEl.textContent = "No Unified Remote servers found.";
+        return;
+      }
+
+      statusEl.textContent = `Found ${servers.length} server(s):`;
+      servers.forEach((srv) => {
+        const btn = document.createElement("button");
+        btn.textContent = `${srv.name} - ${srv.baseUrl}`;
+        btn.style.marginTop = "8px";
+        btn.style.width = "100%";
+        btn.addEventListener("click", () => {
+          addUR(srv.baseUrl, srv.name);
+          renderSavedURs();
+          updateMediaButtons();
+          resultsEl.innerHTML = "";
+          statusEl.textContent = "";
+        });
+        resultsEl.appendChild(btn);
+      });
+    } catch (err) {
+      statusEl.textContent = "Discovery failed: " + err.message;
+    }
+  });
 
 // -- Settings: Add TV manually --
 document.getElementById("save-ip-btn").addEventListener("click", () => {

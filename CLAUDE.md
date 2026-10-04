@@ -62,6 +62,16 @@ There are two interfaces to the same TV protocol: a CLI (`cli.js`) and a web app
 
 - **`web/tvcontrol.js`**: Browser-side logic. Stores TV IP in `localStorage`, sends keys via `fetch('/api/send')`, handles discovery via `fetch('/api/discover')`.
 
+### Unified Remote (UR) mode
+
+A third mode (TV -> CC -> UR) on the media-row toggle controls a Unified Remote server driving Amazon Prime Video in Chrome (see `USE-ARNOREMOTE.md` in the parent folder). In UR mode the rew / play-pause / ff buttons send `rewind15` / `play_pause` / `forward15`, and a pane adds Series, Prime (home), Resume, Full (fullscreen) and a search box.
+
+- `server.js`: `POST /api/ur/run` `{baseUrl, id, name, values?}` does connect -> handshake -> capabilities -> run on every call (the UR Web API rejects a run without them); `POST /api/ur/discover` probes port 9510 on the local /24(s) via `/system/status`.
+- Lists: the Seasons / Episodes buttons call `POST /api/ur/list` `{baseUrl, kind}`. A run returns no data, so the server passes the remote a one-time callback URL (`http://<this host>:8765/api/ur/state/<token>`, host = local interface on the UR server's /24); the remote extracts the page from Chrome and POSTs the JSON there, and the server returns it to the browser (30 s timeout). Needs a series/season page open in the Prime tab.
+- Browser: localStorage `tvctl_ur` (servers, `ip` field holds the base URL), `tvctl_active_ur`, `tvctl_ur_series` (`[{label, url}]`, shown by the Series button).
+- `GET /PrimeSearch.zip` builds a zip (no dependency, see `buildZip` in `server.js`) of `ur-remote/` for the Settings page download. `ur-remote/` is a copy of `../prime-search/` (the Docker build only sees this folder), so re-copy `meta.prop`, `layout.xml` and `remote.lua` after changing the remote.
+- The UR server needs the custom `Arno.PrimeSearch` remote installed (`prime-search/` in the parent folder) and Chrome's View > Developer > Allow JavaScript from Apple Events.
+
 ### Why the server proxy exists
 
 Browsers cannot open raw TCP sockets or UDP multicast. The Node server acts as a thin proxy between the browser's HTTP requests and the TV's TCP/UDP protocols. `--net=host` is required in Docker so the container has direct access to the LAN for both SSDP multicast and TCP connections to the TV.

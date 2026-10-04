@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layout>
+  <grid>
+    <row>
+      <button text="Home" onTap="home" />
+      <button text="Resume" onTap="resume" />
+    </row>
+    <row>
+      <button text="Seasons" onTap="seasons" />
+      <button text="Episodes" onTap="episodes" />
+    </row>
+  </grid>
+  <list id="list" ontap="tapped">
+  </list>
+</layout>

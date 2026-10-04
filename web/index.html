@@ -323,6 +323,74 @@
         transition: width 0.3s ease;
       }
 
+      .ur-pane {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        align-items: center;
+      }
+      .ur-pane[hidden] {
+        display: none;
+      }
+      .ur-search {
+        display: flex;
+        gap: 8px;
+        width: 100%;
+      }
+      .ur-search input,
+      .settings input[type="url"] {
+        flex: 1;
+        min-width: 0;
+        background: #2d2d44;
+        border: 1px solid #555;
+        border-radius: 6px;
+        color: #eee;
+        padding: 10px 12px;
+        font-size: 1rem;
+      }
+      #series-dropdown {
+        max-height: 70vh;
+        overflow-y: auto;
+        width: min(90vw, 360px);
+      }
+      .series-item {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        display: block;
+        width: 100%;
+        margin-bottom: 6px;
+        text-align: left;
+      }
+      .ur-help {
+        font-size: 0.75rem;
+        color: #aaa;
+        line-height: 1.5;
+        margin-bottom: 10px;
+      }
+      .ur-help ol {
+        margin: 6px 0 0 18px;
+      }
+      .ur-help li {
+        margin-bottom: 4px;
+      }
+      .ur-help a,
+      .ur-help code,
+      .ur-help b {
+        color: #ccc;
+      }
+      .series-empty {
+        color: #888;
+        font-size: 0.85rem;
+      }
+      #saved-ur:empty::after {
+        content: "No Unified Remote servers saved yet.";
+      }
+      #saved-series:empty::after {
+        content: "No series saved yet.";
+      }
+
       /* Separator */
       .sep {
         width: 80%;
@@ -652,6 +720,26 @@
           <div id="media-progress-bar" class="media-progress-bar"></div>
         </div>
 
+        <!-- Unified Remote pane (visible in UR mode) -->
+        <div id="ur-pane" class="ur-pane" hidden>
+          <div class="btn-row">
+            <button id="ur-series">Series</button>
+            <button id="ur-home">Prime</button>
+            <button id="ur-resume">Resume</button>
+            <button id="ur-fullscreen">Full</button>
+          </div>
+          <div class="btn-row">
+            <button id="ur-seasons">Seasons</button>
+            <button id="ur-episodes">Episodes</button>
+          </div>
+          <div class="ur-search">
+            <input type="text" id="ur-search-input" placeholder="Search Prime Video" />
+            <button id="ur-search-btn">Go</button>
+          </div>
+        </div>
+        <div id="series-backdrop" class="tracks-dropdown-backdrop"></div>
+        <div id="series-dropdown" class="tracks-dropdown"></div>
+
         <!-- Quick access -->
         <div class="btn-row">
           <button data-key="TR_KEY_HOME">
@@ -740,6 +828,67 @@
             <div id="discover-cc-results"></div>
           </div>
         </div>
+        <div class="settings-section">
+          <h2>Unified Remote</h2>
+          <div class="ur-help">
+            UR mode controls Amazon Prime Video in Chrome on a Mac running the
+            Unified Remote server. That Mac needs a small custom remote
+            (<b>PrimeSearch</b>) that finds your open Prime Video tab, searches,
+            opens seasons/episodes and skips &plusmn;15&nbsp;s.
+            <ol>
+              <li>
+                <a id="ur-zip-link" href="/PrimeSearch.zip" download>Download PrimeSearch.zip</a>
+                and unzip it into
+                <code>~/Library/Application Support/Unified Remote/Remotes/Custom/</code>
+                on the Mac (you should end up with a <code>PrimeSearch</code>
+                folder there). The server picks it up automatically.
+              </li>
+              <li>
+                In Chrome on that Mac enable
+                <b>View &gt; Developer &gt; Allow JavaScript from Apple Events</b>.
+                Without it, seasons, episodes, resume and &plusmn;15&nbsp;s do not work.
+              </li>
+              <li>
+                The first time, allow Unified Remote to control Chrome when macOS asks
+                (System Settings &gt; Privacy &amp; Security &gt; Automation).
+              </li>
+              <li>
+                Keep one Prime Video tab open and logged in; it is reused instead of
+                opening new tabs.
+              </li>
+            </ol>
+          </div>
+          <div id="saved-ur" class="device-list"></div>
+          <div class="field" style="margin-top: 10px">
+            <div class="row">
+              <input type="text" id="ur-url-input" placeholder="http://192.168.1.111:9510" />
+              <input type="text" id="ur-name-input" placeholder="Nickname" />
+              <button id="save-ur-btn">Add</button>
+            </div>
+          </div>
+          <div class="field" style="margin-top: 8px">
+            <button id="discover-ur-btn" class="discover-btn">
+              Search for Unified Remote servers
+            </button>
+            <div id="discover-ur-status" class="discover-status"></div>
+            <div id="discover-ur-results"></div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h2>UR Series</h2>
+          <div id="saved-series" class="device-list"></div>
+          <div class="field" style="margin-top: 10px">
+            <div class="row">
+              <input type="text" id="series-label-input" placeholder="Label (e.g. Chicago PD)" />
+            </div>
+            <div class="row">
+              <input type="text" id="series-url-input" placeholder="https://www.primevideo.com/detail/..." />
+              <button id="save-series-btn">Add</button>
+            </div>
+          </div>
+        </div>
+
         <div class="settings-section" style="border: none; margin-top: 8px; padding-top: 0">
           <div style="font-size: 0.7rem; color: #aaa; line-height: 1.5">
             To install as an app: download
