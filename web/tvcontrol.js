@@ -656,10 +656,11 @@ mediaRew.addEventListener("click", () => {
 });
 
 mediaPlayPause.addEventListener("click", () => {
+  mediaPlayPause.blur();
   if (mediaMode === "tv") {
     sendKey("TR_KEY_PLAYPAUSE");
   } else if (mediaMode === "ur") {
-    urCall(UR_PRIME_VIDEO, "play_pause");
+    urCall(UR_PRIME_SEARCH, "toggle_play");
   } else {
     const action = ccPlaying ? "pause" : "play";
     sendChromecastCommand(action);

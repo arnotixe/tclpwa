@@ -141,6 +141,12 @@ local function show(kind, items)
 	server.update({ id = "list", children = children });
 end
 
+-- Prime's page holds several <video> elements (previews, empty placeholders);
+-- the real player is the one with a loaded source, so pick the longest.
+local PICK_VIDEO = "Array.from(document.querySelectorAll('video'))"
+	.. ".filter(function(x){return x.readyState>0&&isFinite(x.duration);})"
+	.. ".sort(function(a,b){return b.duration-a.duration;})[0];";
+
 -- Move the playback position of the <video> in the Prime tab by `delta`
 -- seconds (negative = back). Works while playing or paused; no focus needed.
 local function seek_by(delta)
@@ -149,7 +155,7 @@ local function seek_by(delta)
 		print("PrimeSearch: seek needs a number of seconds");
 		return;
 	end
-	local js = "(function(){var v=document.querySelector('video');"
+	local js = "(function(){var v=" .. PICK_VIDEO
 		.. "if(!v)return 'no video';"
 		.. "v.currentTime=Math.max(0,v.currentTime+(" .. delta .. "));"
 		.. "return 'now at '+Math.round(v.currentTime)+'s of '+Math.round(v.duration)+'s';})()";
@@ -161,6 +167,22 @@ local function seek_by(delta)
 		'end tell'
 	);
 	print("PrimeSearch: seek " .. delta .. "s -> " .. tostring(out));
+end
+
+--@help Toggle play/pause on the Prime tab's <video> (no key press)
+actions.toggle_play = function()
+	local js = "(function(){var v=" .. PICK_VIDEO
+		.. "if(!v)return 'no video';"
+		.. "if(v.paused){v.play();return 'playing';}"
+		.. "v.pause();return 'paused';})()";
+	local out = script.apple(
+		'tell application "Google Chrome"',
+		FIND_TAB,
+		'if theTab is missing value then return "ERR: no Prime Video tab open"',
+		'return execute theTab javascript "' .. as_literal(js) .. '"',
+		'end tell'
+	);
+	print("PrimeSearch: toggle_play -> " .. tostring(out));
 end
 
 --@help Skip back 15 seconds
