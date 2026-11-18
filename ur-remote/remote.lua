@@ -212,10 +212,9 @@ local function tab_js(js)
 	) or "");
 end
 
--- Prime only renders its player controls while it sees real mouse movement
--- (synthetic DOM events are ignored), so move the OS cursor over the Chrome
--- window until `probe_js` returns "1". Needs Accessibility for Unified Remote.
-local function wake_controls(probe_js)
+-- Bring Chrome and its Prime tab to the front. Returns the window bounds
+-- "x1,y1,x2,y2", or nil if there is no Prime tab.
+local function focus_prime()
 	local b = tostring(script.apple(
 		'tell application "Google Chrome"',
 		FIND_TAB,
@@ -228,11 +227,23 @@ local function wake_controls(probe_js)
 		'return ((item 1 of b) as text) & "," & ((item 2 of b) as text) & "," & ((item 3 of b) as text) & "," & ((item 4 of b) as text)',
 		'end tell'
 	) or "");
-	local x1, y1, x2, y2 = b:match("^(-?%d+),(-?%d+),(-?%d+),(-?%d+)$");
-	if not x1 then
-		print("PrimeSearch: wake: no Chrome window (" .. b .. ")");
-		return false;
+	-- AppleScript may format negative numbers with U+2212 MINUS SIGN
+	b = b:gsub("\226\136\146", "-"):gsub("%s+", "");
+	-- note: the captures matter, in Lua ",-?" would make "-" a quantifier on ","
+	if not b:match("^(-?%d+),(-?%d+),(-?%d+),(-?%d+)$") then
+		print("PrimeSearch: no Chrome window with a Prime tab (" .. b .. ")");
+		return nil;
 	end
+	return b;
+end
+
+-- Prime only renders its player controls while it sees real mouse movement
+-- (synthetic DOM events are ignored), so move the OS cursor over the Chrome
+-- window until `probe_js` returns "1". Needs Accessibility for Unified Remote.
+local function wake_controls(probe_js)
+	local b = focus_prime();
+	if not b then return false; end
+	local x1, y1, x2, y2 = b:match("^(-?%d+),(-?%d+),(-?%d+),(-?%d+)$");
 	local cx = (tonumber(x1) + tonumber(x2)) / 2;
 	local cy = (tonumber(y1) + tonumber(y2)) / 2;
 	for i = 1, 8 do
@@ -260,19 +271,66 @@ local function exists_js(sel)
 	return "document.querySelector(\"" .. sel .. "\")?'1':'0'";
 end
 
--- Reads the open subtitles menu as "<current index>|<label>=<value>\n..." (0-based).
-local READ_SUBS_JS = [==[
-(function(){
-  var r = Array.from(document.querySelectorAll('input[name="subtitle"]'));
-  var cur = -1;
-  var rows = r.map(function (i, n) {
-    if (i.checked) cur = n;
-    var l = i.closest('label');
-    return ((l ? l.textContent : '').replace(/CC$/, '').trim()) + '=' + i.value;
-  });
-  return cur + '|' + rows.join('\n');
-})()
-]==];
+-- Radio inputs of the subtitles / audio menus. Only the subtitle ids are
+-- confirmed; audio covers both a separate audio menu and audio radios sitting
+-- in a combined "Subtitles and audio" panel.
+local SUB_RADIOS = "input[name=subtitle]";
+local AUDIO_RADIOS = "#atvwebplayersdk-audio-menu input[type=radio], input[type=radio][name*=audio i]";
+
+-- Reads the radios matching `sel` as "<current index>|<label>=<value>\n..." (0-based).
+local function read_radios_js(sel)
+	return "(function(){"
+		.. "var r=Array.from(document.querySelectorAll('" .. sel .. "'));var cur=-1;"
+		.. "var rows=r.map(function(i,n){if(i.checked)cur=n;var l=i.closest('label');"
+		.. "return ((l?l.textContent:'').replace(/CC$/,'').replace(/[=\\n]+/g,' ').trim())+'='+i.value;});"
+		.. "return cur+'|'+rows.join('\\n');})()";
+end
+
+local function click_radio_js(sel, index)
+	return "(function(){var r=document.querySelectorAll('" .. sel .. "')[" .. index .. "];if(!r)return '0';r.click();return '1';})()";
+end
+
+-- Parse read_radios_js output into { current = index, list = {{label, value}...} }.
+local function parse_radios(out)
+	local cur, rest = out:match("^(-?%d+)|(.*)$");
+	if not cur then return nil; end
+	local list = {};
+	for line in (rest .. "\n"):gmatch("([^\n]*)\n") do
+		local label, value = line:match("^(.*)=(.-)$");
+		table.insert(list, { label = label or "", value = value or "" });
+	end
+	if rest == "" then list = {}; end
+	return { current = tonumber(cur), list = list };
+end
+
+-- Opens the submenu that holds the radios `sel`: wakes the controls, opens the
+-- gear menu, then clicks the submenu button (`open_js`). Returns ok, err.
+local function open_track_menu(sel, open_js)
+	if not wake_controls(exists_js("#atvwebplayersdk-settings-button")) then
+		return false, "player controls did not appear";
+	end
+	if tab_js(exists_js(sel)) == "1" then return true; end
+	-- the gear toggles the menu, so only click it when the menu is closed
+	if tab_js(exists_js("#atvwebplayersdk-settings-menu")) ~= "1" then
+		tab_js(click_js("atvwebplayersdk-settings-button"));
+	end
+	if not wait_js(exists_js("#atvwebplayersdk-settings-menu, #atvwebplayersdk-subtitles-button")) then
+		return false, "settings menu did not open";
+	end
+	if tab_js(exists_js(sel)) ~= "1" then tab_js(open_js); end
+	if not wait_js(exists_js(sel)) then return false, "no options found"; end
+	return true;
+end
+
+-- Close any open submenu, then the gear menu, so the controls can hide again.
+local function close_track_menus()
+	tab_js("(function(){['atvwebplayersdk-subtitles-menu','atvwebplayersdk-audio-menu'].forEach(function(id){"
+		.. "var b=document.querySelector('#'+id+' button[aria-label=\"Close\"]');if(b)b.click();});})()");
+	script.apple('delay 0.3');
+	if tab_js(exists_js("#atvwebplayersdk-settings-menu")) == "1" then
+		tab_js(click_js("atvwebplayersdk-settings-button"));
+	end
+end
 
 -- Language bucket of a subtitle option: off / en / es (nil = ignore).
 local function sub_kind(label, value)
@@ -285,41 +343,24 @@ end
 
 --@help Cycle subtitles Off -> English -> Spanish (only languages the title has)
 actions.subs = function()
-	if not wake_controls("document.getElementById('atvwebplayersdk-settings-button')?'1':'0'") then
-		print("PrimeSearch: subs: player controls did not appear");
+	local ok, err = open_track_menu(SUB_RADIOS, click_js("atvwebplayersdk-subtitles-button"));
+	if not ok then
+		print("PrimeSearch: subs: " .. err);
+		close_track_menus();
 		return;
 	end
-	-- the gear toggles the menu, so only click it when the menu is closed
-	if tab_js(exists_js("#atvwebplayersdk-settings-menu")) ~= "1" then
-		tab_js(click_js("atvwebplayersdk-settings-button"));
-	end
-	if not wait_js(exists_js("#atvwebplayersdk-subtitles-button, #atvwebplayersdk-subtitles-menu")) then
-		print("PrimeSearch: subs: settings menu did not open");
-		return;
-	end
-	if tab_js(exists_js("#atvwebplayersdk-subtitles-menu")) ~= "1" then
-		tab_js(click_js("atvwebplayersdk-subtitles-button"));
-	end
-	if not wait_js(exists_js("input[name='subtitle']")) then
-		print("PrimeSearch: subs: no subtitle options");
-		return;
-	end
-	local out = tab_js(READ_SUBS_JS);
-	local cur, rest = out:match("^(-?%d+)|(.*)$");
-	cur = tonumber(cur);
-	if not cur then
+	local out = tab_js(read_radios_js(SUB_RADIOS));
+	local menu = parse_radios(out);
+	if not menu then
 		print("PrimeSearch: subs: unreadable menu: " .. out);
+		close_track_menus();
 		return;
 	end
-	local opts, order, n = {}, { "off", "en", "es" }, 0;
-	for line in rest:gmatch("[^\n]+") do
-		local label, value = line:match("^(.*)=(.-)$");
-		if label then
-			local kind = sub_kind(label, value);
-			if kind and not opts[kind] then opts[kind] = n; end
-			if n == cur then opts.current = kind; end
-		end
-		n = n + 1;
+	local opts, order = {}, { "off", "en", "es" };
+	for n, o in ipairs(menu.list) do
+		local kind = sub_kind(o.label, o.value);
+		if kind and opts[kind] == nil then opts[kind] = n - 1; end
+		if n - 1 == menu.current then opts.current = kind; end
 	end
 	local avail = {};
 	for _, k in ipairs(order) do
@@ -330,15 +371,156 @@ actions.subs = function()
 		if k == opts.current then pos = i; end
 	end
 	local nextk = avail[(pos % #avail) + 1];
-	local res = tab_js("(function(){var r=document.querySelectorAll('input[name=\"subtitle\"]')[" .. opts[nextk] .. "];if(!r)return '0';r.click();return '1';})()");
+	local res = tab_js(click_radio_js(SUB_RADIOS, opts[nextk]));
 	print("PrimeSearch: subs " .. tostring(opts.current) .. " -> " .. tostring(nextk) .. " (" .. res .. ")");
 	script.apple('delay 0.3');
-	-- close the menu so the controls can hide again
-	tab_js("(function(){var b=document.querySelector('#atvwebplayersdk-subtitles-menu button[aria-label=\"Close\"]');if(b)b.click();})()");
-	script.apple('delay 0.3');
-	if tab_js(exists_js("#atvwebplayersdk-settings-menu")) == "1" then
-		tab_js(click_js("atvwebplayersdk-settings-button"));
+	close_track_menus();
+end
+
+-- Clicks the audio submenu button: #atvwebplayersdk-audio-button, else a gear
+-- menu entry mentioning "audio", else the subtitles button (combined panel).
+local OPEN_AUDIO_JS = [==[
+(function(){
+  var b = document.getElementById('atvwebplayersdk-audio-button');
+  if (!b) {
+    var m = document.getElementById('atvwebplayersdk-settings-menu') || document;
+    b = Array.from(m.querySelectorAll('button,[role=button],[role=menuitem]')).filter(function (e) {
+      return /audio/i.test(e.textContent + ' ' + (e.getAttribute('aria-label') || ''));
+    })[0];
+  }
+  if (!b) b = document.getElementById('atvwebplayersdk-subtitles-button');
+  if (!b) return '0';
+  b.click();
+  return '1';
+})()
+]==];
+
+-- Describes the open player menus, logged when the audio options are not found.
+local DUMP_MENUS_JS = [==[
+(function(){
+  var ids = Array.from(document.querySelectorAll('[id^=atvwebplayersdk-][id*=menu], [id^=atvwebplayersdk-][id$=button]')).map(function (e) { return e.id; });
+  var radios = Array.from(document.querySelectorAll('input[type=radio]')).map(function (i) { return i.name + '=' + i.value; });
+  var m = document.getElementById('atvwebplayersdk-settings-menu');
+  var menu = m ? m.innerText.replace(/\s+/g, ' ').slice(0, 300) : '(closed)';
+  return 'ids: ' + ids.join(' ') + ' | radios: ' + radios.join(' ') + ' | settings menu: ' + menu;
+})()
+]==];
+
+-- Audio option -> lang ("en" / "es" / nil) and a score; higher is better:
+-- +2 not audio description, +1 US English / Latin American Spanish.
+local function audio_kind(label, value)
+	local l, v = label:lower(), value:lower():gsub("_", "-");
+	local lang;
+	if v:match("^en") or l:match("^english") then
+		lang = "en";
+	elseif v:match("^es") or l:match("^espa") or l:match("^spanish") then
+		lang = "es";
+	else
+		return nil, 0;
 	end
+	local score = 0;
+	if not (l:match("audio description") or l:match("descri") or v:match("descri") or v:match("%-ad$")) then
+		score = score + 2;
+	end
+	if lang == "en" and (v:match("^en%-us") or l:match("united states") or l:match("%(us%)") or l:match("american")) then
+		score = score + 1;
+	elseif lang == "es" and (v:match("^es%-419") or v:match("^es%-mx") or v:match("^es%-us")
+		or l:match("latino") or l:match("latin america") or l:match("xico")) then
+		score = score + 1;
+	end
+	return lang, score;
+end
+
+--@help Toggle audio English <-> Spanish (prefers US English / Latin American Spanish)
+actions.audio = function()
+	local ok, err = open_track_menu(AUDIO_RADIOS, OPEN_AUDIO_JS);
+	if not ok then
+		print("PrimeSearch: audio: " .. err .. " (" .. tab_js(DUMP_MENUS_JS) .. ")");
+		close_track_menus();
+		return;
+	end
+	local out = tab_js(read_radios_js(AUDIO_RADIOS));
+	local menu = parse_radios(out);
+	if not menu then
+		print("PrimeSearch: audio: unreadable menu: " .. out);
+		close_track_menus();
+		return;
+	end
+	-- best option (0-based index) per language, and the current language
+	local best, score, current = {}, {}, nil;
+	for n, o in ipairs(menu.list) do
+		local lang, sc = audio_kind(o.label, o.value);
+		if lang and (best[lang] == nil or sc > score[lang]) then
+			best[lang], score[lang] = n - 1, sc;
+		end
+		if n - 1 == menu.current then current = lang; end
+	end
+	local target;
+	if current == "en" then
+		target = "es";
+	elseif current == "es" then
+		target = "en";
+	else
+		target = best.en and "en" or "es";
+	end
+	if best[target] == nil then
+		-- no English/Spanish at all, or only the language already playing
+		print("PrimeSearch: audio: nothing to switch to (current " .. tostring(current) .. ")");
+	else
+		local o = menu.list[best[target] + 1];
+		local res = tab_js(click_radio_js(AUDIO_RADIOS, best[target]));
+		print("PrimeSearch: audio " .. tostring(current) .. " -> " .. o.label .. " [" .. o.value .. "] (" .. res .. ")");
+		script.apple('delay 0.3');
+	end
+	close_track_menus();
+end
+
+--@help Wake the Mac display: focus the Prime window and wiggle the cursor over it
+actions.wiggle = function()
+	-- declare user activity, which wakes the display even where a synthetic
+	-- mouse move alone does not (-t 1: release the assertion after 1 s)
+	script.apple('do shell script "caffeinate -u -t 1"');
+	local b = focus_prime();
+	if not b then return; end
+	local x1, y1, x2, y2 = b:match("^(-?%d+),(-?%d+),(-?%d+),(-?%d+)$");
+	local cx = (tonumber(x1) + tonumber(x2)) / 2;
+	local cy = (tonumber(y1) + tonumber(y2)) / 2;
+	for i = 1, 6 do
+		libs.mouse.moveto(cx + (i % 2 == 0 and 20 or -20), cy + (i % 3 - 1) * 10);
+		script.apple('delay 0.1');
+	end
+	libs.mouse.moveto(cx, cy);
+	print("PrimeSearch: wiggle at " .. cx .. "," .. cy);
+end
+
+-- "1"/"0" = muted state of the Prime player's <video>, "" if there is none.
+local MUTED_JS = "(function(){var v=" .. PICK_VIDEO .. "return v?(v.muted?'1':'0'):'';})()";
+
+--@help Toggle mute on the Prime player (the page's audio, not the TV)
+actions.mute = function()
+	local before = tab_js(MUTED_JS);
+	if before ~= "0" and before ~= "1" then
+		print("PrimeSearch: mute: no video (" .. before .. ")");
+		return;
+	end
+	-- Prime's own "m" shortcut. A real key press counts as a user gesture, so
+	-- Chrome's autoplay policy lets the video keep playing when unmuted.
+	if focus_prime() then
+		libs.keyboard.stroke("m");
+		script.apple('delay 0.3');
+	end
+	local after = tab_js(MUTED_JS);
+	local how = "key";
+	if after == before then
+		-- key press did not reach the player: set the flag directly, and
+		-- resume if Chrome paused the video for unmuting without a gesture
+		how = "js";
+		after = tab_js("(function(){var v=" .. PICK_VIDEO
+			.. "if(!v)return '';var p=v.paused;v.muted=!v.muted;"
+			.. "if(!p&&v.paused)v.play().catch(function(){});"
+			.. "return v.muted?'1':'0';})()");
+	end
+	print("PrimeSearch: mute (" .. how .. ") -> " .. (after == "1" and "muted" or after == "0" and "unmuted" or after));
 end
 
 --@help Go to the Prime Video home page, or to a given Prime Video URL

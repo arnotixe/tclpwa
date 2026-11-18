@@ -32,6 +32,7 @@ docker run --net=host tvctl
 ./hdmi2.sh                                # Navigate to HDMI2 via Smart TV menu sequence
 ./hdmi3.sh                                # Navigate to HDMI3
 ./off.sh                                  # Power off
+./ur-deploy.sh                            # Install ur-remote/ on the UR Mac over SSH (see UR section)
 ```
 
 ## Architecture
@@ -71,6 +72,11 @@ A third mode (TV -> CC -> UR) on the media-row toggle controls a Unified Remote 
 - Browser: localStorage `tvctl_ur` (servers, `ip` field holds the base URL), `tvctl_active_ur`, `tvctl_ur_series` (`[{label, url}]`, shown by the Series button).
 - `GET /PrimeSearch.zip` builds a zip (no dependency, see `buildZip` in `server.js`) of `ur-remote/` for the Settings page download. `ur-remote/` is the source of truth for the custom remote (`meta.prop`, `layout.xml`, `remote.lua`).
 - Subs (the media-row tracks button, enabled in UR mode): `subs` action cycles subtitles Off -> English -> Spanish (skipping missing languages). Prime only renders player controls on real mouse movement, so `wake_controls` in `remote.lua` raises Chrome and moves the OS cursor via `libs.mouse` (UR needs macOS Accessibility permission), then clicks `#atvwebplayersdk-settings-button` -> `#atvwebplayersdk-subtitles-button` -> the `input[name=subtitle]` radio.
+- Audio (music-note button between tracks and mute, UR mode only): `audio` action toggles the audio track English <-> Spanish, picking per language a non audio-description track, preferring US English / Latin American Spanish. If nothing other than the current language is available it just closes the menu. Shares `open_track_menu` / `close_track_menus` with `subs`. Only the subtitle DOM ids are confirmed; the audio radios are looked up by `#atvwebplayersdk-audio-menu` or `input[name*=audio]`, and on failure the remote logs the player menu ids and radio names.
+- Wiggle (Zz button next to Episodes): `wiggle` action wakes the Mac display: `caffeinate -u -t 1` (declares user activity), then focuses the Prime window via `focus_prime` and wiggles the cursor over it with `libs.mouse`.
+- Mute (button next to the tracks button, shown only in UR mode): `mute` action toggles the Prime player's audio, not the TV. It focuses the Prime tab and presses Prime's `m` shortcut via `libs.keyboard` (a real key press, so Chrome's autoplay policy does not pause the video on unmute); if the muted state did not change it falls back to toggling `video.muted` in JS.
+- Dev loop: `./ur-deploy.sh` installs `ur-remote/` on the UR Mac over SSH (default `arno@192.168.1.111`) and reloads the server; `./ur-deploy.sh run <action>` runs an action via the local tvctl server and prints the UR log lines; `./ur-deploy.sh log` shows the log (`GET :9510/system/log/60/8/`). Use this to test remote changes instead of the zip.
+- Prime player DOM (seen in the log dump): `atvwebplayersdk-{settings,captions-toggle,mute-toggle,play-pause,skip-backward,skip-forward,fullscreen-toggle,speed-control,next-episode,close-player}-button`. Audio radio values look like `en-us_dialog_0`, `es-419_dialog_0`.
 - The UR server needs the custom `Arno.PrimeSearch` remote installed (`ur-remote/`, installed from the Settings page zip) and Chrome's View > Developer > Allow JavaScript from Apple Events.
 
 ### Why the server proxy exists

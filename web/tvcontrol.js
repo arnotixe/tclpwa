@@ -434,6 +434,8 @@ const mediaFF = document.getElementById("media-ff");
 const mediaProgressBar = document.getElementById("media-progress-bar");
 const mediaTitleEl = document.getElementById("media-title");
 const mediaTracksBtn = document.getElementById("media-tracks-btn");
+const mediaMuteBtn = document.getElementById("media-mute-btn");
+const mediaAudioBtn = document.getElementById("media-audio-btn");
 const tracksDropdown = document.getElementById("tracks-dropdown");
 const tracksBackdrop = document.getElementById("tracks-backdrop");
 const urPane = document.getElementById("ur-pane");
@@ -507,6 +509,11 @@ function updateMediaButtons() {
     mediaMode === "ur"
       ? !getActiveURBase()
       : mediaMode !== "cc" || ccTracks.length === 0;
+  // Mute toggles the Prime <video> (not the TV), so it only exists in UR mode
+  mediaMuteBtn.hidden = mediaMode !== "ur";
+  mediaMuteBtn.disabled = !getActiveURBase();
+  mediaAudioBtn.hidden = mediaMode !== "ur";
+  mediaAudioBtn.disabled = !getActiveURBase();
   // Media title
   mediaTitleEl.textContent = mediaMode === "cc" && ccTitle ? ccTitle : "";
   // Progress bar
@@ -622,6 +629,16 @@ mediaTracksBtn.addEventListener("click", () => {
 
 tracksBackdrop.addEventListener("click", closeTracksDropdown);
 
+mediaAudioBtn.addEventListener("click", () => {
+  mediaAudioBtn.blur();
+  urCall(UR_PRIME_SEARCH, "audio"); // toggles audio English <-> Spanish
+});
+
+mediaMuteBtn.addEventListener("click", () => {
+  mediaMuteBtn.blur();
+  urCall(UR_PRIME_SEARCH, "mute"); // toggles mute on the Prime player
+});
+
 async function sendChromecastCommand(action) {
   const ip = getActiveChromecastIP();
   if (!ip) return;
@@ -714,6 +731,9 @@ document
 document
   .getElementById("ur-resume")
   .addEventListener("click", () => urCall(UR_PRIME_SEARCH, "resume"));
+document
+  .getElementById("ur-wiggle")
+  .addEventListener("click", () => urCall(UR_PRIME_SEARCH, "wiggle"));
 document
   .getElementById("ur-fullscreen")
   .addEventListener("click", () => urCall(UR_PRIME_VIDEO, "fullscreen"));

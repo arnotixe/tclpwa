@@ -86,6 +86,18 @@ Debugging: `curl -s "$SERVERURL/system/log/40/8/" | jq -r '.data[]' | head` show
 
 Source in `ur-remote/` (repo root). Install by copying it to the server's custom remotes folder (`~/Library/Application Support/Unified Remote/Remotes/Custom/PrimeSearch/`); the server picks it up automatically (or `GET /system/reload`). It appears as remote id `Arno.PrimeSearch`.
 
+#### Deploy and test from the dev machine (SSH)
+
+Faster than downloading the zip on the Mac: `ur-deploy.sh` (repo root) installs `ur-remote/` over SSH (default `arno@192.168.1.111`, key auth; override with `UR_SSH=user@host`), keeps a backup in `/tmp/PrimeSearch.bak-*` on the Mac, checks the checksum and calls `/system/reload`. `run` triggers an action through the tvctl server (`TVCTL`, default `http://localhost:8765`, which does the handshake) and prints the resulting log lines from the UR server.
+
+```bash
+./ur-deploy.sh                 # install + reload
+./ur-deploy.sh run audio       # run an action, show its log output
+./ur-deploy.sh log             # last PrimeSearch log lines
+```
+
+The UR log is also readable directly: `curl -s http://192.168.1.111:9510/system/log/60/8/`.
+
 It finds an already open Prime Video tab in Google Chrome (AppleScript, URL contains `primevideo.com`), navigates that tab and focuses it. If no such tab exists it opens a new one. Leave one Prime Video tab open as initial setup. macOS may ask to allow Unified Remote to control Chrome (Automation permission).
 
 Actions: `home` (optional `url` parameter, defaults to `https://www.primevideo.com`), and `search` with a text parameter. Parameters go in `Run.Extras.Values`:
@@ -105,6 +117,9 @@ More actions (all take no parameter unless noted):
 - `seasons` / `episodes` take an optional `callback` URL parameter: after extracting, the remote also POSTs the JSON (same content as `~/prime-state.json`, or `{"error": "..."}`) to it. This is how a caller on another machine (e.g. `tclpwa`) gets the lists, since a run returns no data.
 - `resume`: go to the "Resume Sx Ey" link (`autoplay=1&t=<offset>`) of the current series page.
 - `rewind15` / `forward15`: skip 15 seconds back/forward. `seek` with a `seconds` parameter (negative = back) does any amount. These set `currentTime` on the page's `<video>` via Chrome JavaScript, so no key focus is needed and it works while paused. (The bundled `Unified.AmazonPrimeVideo` `rewind`/`forward` only press the arrow keys, which seek in Prime's default 10 s steps.)
+- `audio`: toggle the audio track English <-> Spanish (prefers US English / Latin American Spanish, avoids audio-description tracks). Closes the menu without changing anything if there is no English/Spanish track or only the one already playing. If the audio options are not found, the log line lists the player menu ids and radio inputs, for fixing the selectors.
+- `wiggle`: wake the Mac display. Runs `caffeinate -u -t 1`, focuses the Prime window and wiggles the cursor over it (needs Accessibility, like `subs`).
+- `mute`: toggle mute on the Prime player (page audio, not system/TV volume). Focuses the Prime tab and presses `m`; falls back to flipping `video.muted` via JavaScript if the key did not reach the player. Playback often starts muted because Chrome blocks unmuted autoplay; unmuting from script alone can make Chrome pause the video, the real key press avoids that.
 - `open` with a `url` parameter: navigate the Prime tab to any URL (`"Extras":{"Values":[{"Value":"https://www.primevideo.com/detail/..."}]}`).
 
 ```bash

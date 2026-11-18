@@ -82,22 +82,36 @@ Claude was kind enough to build a version for us.
 
 ## Docker
 
-docker stop tvctl
-docker rm tvctl
-docker build -t tvctl .
+### Rebuild and restart (after pulling or changing code)
+
+The image bakes in `server.js`, `web/` and `ur-remote/`, so every code change needs a rebuild. The certs are bind-mounted.
+
+```bash
+cd /home/arno/jobb/opensource/tvctl
+DOCKER_CONFIG=$(mktemp -d) docker build -t tvctl . && \
+docker rm -f tvctl && \
 docker run -d --net=host --restart unless-stopped --name tvctl \
- -v /home/arno/jobb/opensource/tvctl/cert.pem:/app/cert.pem:ro \
- -v /home/arno/jobb/opensource/tvctl/key.pem:/app/key.pem:ro \
- tvctl
-docker start tvctl
+  -v /home/arno/jobb/opensource/tvctl/cert.pem:/app/cert.pem:ro \
+  -v /home/arno/jobb/opensource/tvctl/key.pem:/app/key.pem:ro \
+  tvctl
+docker logs -f tvctl   # check it came up (Ctrl-C to stop following)
+```
+
+`DOCKER_CONFIG=$(mktemp -d)` builds with an empty Docker config. The legacy builder (no buildx installed) calls every credential helper in `~/.docker/config.json`, so an expired `gcloud` login fails the build even though only the public `node:22-alpine` image is needed. Installing buildx (`sudo apt install docker-buildx-plugin`) also avoids this.
+
+The build runs first, so the old container keeps serving if the build fails. The same commands do a first-time install (`docker rm -f` just reports that no container exists).
+
+If `ur-remote/` changed, also re-download `PrimeSearch.zip` from the Settings page and reinstall it on the Unified Remote server. Reload the web app in the browser (a PWA may need a full close and reopen to pick up the new `web/` files).
 
 visit http://192.168.1.130:8765/ to run it,
 visit https://192.168.1.130:8766/ to allow for PWA installation (see settings page)
 
-### can after that start/stop with
+### Start / stop
 
+```bash
 docker start tvctl
 docker stop tvctl
+```
 
 ### chromecast investigation
 
